@@ -1,14 +1,14 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import argparse
-import os
+import ujson
 from pathlib import Path
 
+from faker import Faker
 from parsimonious.grammar import Grammar
-from typing import *
 
 from sketch2code.config import ROOT_DIR
-
+from sketch2code.data_model import Tag
 """
 Use to obtain the data and preprocess it to get to our desired format
 """
@@ -20,6 +20,7 @@ def download_file_from_google_drive(id, destination):
     https://gist.github.com/charlesreid1/4f3d676b33b95fce83af08e4ec261822
     """
     import requests
+
     def get_confirm_token(response):
         for key, value in response.cookies.items():
             if key.startswith('download_warning'):
@@ -49,7 +50,7 @@ def download_file_from_google_drive(id, destination):
     save_response_content(response, destination)
 
 
-def download_pix2code(download_path):
+def download_pix2code(download_path: Path):
     """Download file from google drive, run pre-processing to generate correct data format"""
     grammar = Grammar(r"""
 program = group_token+
@@ -58,25 +59,80 @@ _token_ = _ token _
 token = ~"[A-Z-0-9]+"i
 _ = ~"[ \n]*"
 """)
+    fake = Faker()
 
-    def dsl2tree(node, output_tree: list):
+    def read_peg(node, output: list):
         def get_token(token_node):
             return token_node.text.strip()
 
         if node.expr_name == 'group_token':
             if node.children[0].expr_name == '_token_':
-                output_tree.append(node.children[0].text)
+                output.append(get_token(node.children[0]))
             else:
                 node = node.children[0]
                 group_token = get_token(node.children[0])
+                output.append({"name": group_token, "children": []})
 
-                output_tree.append({ "name": group_token, "children": [] })
-                [c.expr_name for c in node.children if c.expr_name == '_token_' or c.expr_name == 'group_token']
+                read_peg(node.children[2], output[-1]['children'])
+                for c in node.children[3].children:
+                    read_peg(c.children[1], output[-1]['children'])
+        elif node.expr_name == 'token':
+            output.append(get_token(node.text))
 
-        for child in node.children:
+    def tree2tag(group_node, tag: Tag):
+        if group_node['name'] == 'header':
+            ctag = Tag('ul', ['navbar-nav'], [])
+            for x in group_node['children']:
+                atag = Tag('a', ['nav-link'], [fake.name().split(" ")[0]])
+                if x == 'btn-active':
+                    ctag.children.append(Tag('li', ['nav-item', 'active'], [atag]))
+                elif x == 'btn-inactive':
+                    ctag.children.append(Tag('li', ['nav-item'], [atag]))
+                else:
+                    raise NotImplementedError(f"Doesn't support type {x} yet")
 
+            tag.children.append(Tag('nav', ['navbar', 'navbar-expand-sm', 'bg-light'], [ctag]))
+        elif group_node['name'] == 'row':
+            ctag = Tag('div', ['row'], [])
+            for x in group_node['children']:
+                assert isinstance(x, dict), f"{x} must be a group node"
+                tree2tag(x, ctag)
 
-    for file in Path("/home/rook/workspace/CSCI559/Project/pix2code/datasets/web/all_data").iterdir():
+            if tag.name == 'html':
+                tag.children.append(Tag('div', ['container'], [ctag]))
+            else:
+                tag.children.append(ctag)
+        elif group_node['name'] in {'single', 'double', 'quadruple'}:
+            if group_node['name'] == 'single':
+                class_name = 'col-sm-12'
+            elif group_node['name'] == 'double':
+                class_name = 'col-sm-6'
+            elif group_node['name'] == 'quadruple':
+                class_name = 'col-sm-3'
+            else:
+                raise NotImplementedError(f"Doesn't support group node {group_node['name']} yet")
+
+            ctag = Tag('div', ['grey-background'], [])
+            for x in group_node['children']:
+                if x == 'small-title':
+                    ctag.children.append(Tag("h4", [], [fake.job()]))
+                elif x == 'text':
+                    ctag.children.append(Tag("p", [], [" ".join(fake.text().split(" ")[:10])]))
+                elif x == 'btn-orange':
+                    ctag.children.append(Tag("button", ["btn", "btn-warning"], [fake.company()]))
+                elif x == 'btn-red':
+                    ctag.children.append(Tag("button", ["btn", "btn-danger"], [fake.company()]))
+                elif x == 'btn-green':
+                    ctag.children.append(Tag("button", ["btn", "btn-success"], [fake.company()]))
+                else:
+                    raise NotImplementedError(f"Doesn't support type {x} yet")
+            tag.children.append(Tag('div', [class_name], [ctag]))
+        else:
+            raise NotImplementedError(f"Doesn't support group node {group_node} yet")
+
+    download_path.mkdir(exist_ok=True, parents=True)
+    examples = []
+    for file in sorted((ROOT_DIR / "../all_data").iterdir()):
         if not file.name.endswith(".gui"):
             continue
 
@@ -84,9 +140,22 @@ _ = ~"[ \n]*"
             dsl = f.read().replace("\n", " ")
 
         program = grammar.parse(dsl)
+        tree = []
+        for c in program.children:
+            read_peg(c, tree)
 
-        print(program)
-        break
+        # uncomment for debug
+        # print(json.dumps(tree, indent=4))
+        tag = Tag("html", [], [])
+        for gn in tree:
+            tree2tag(gn, tag)
+
+        # print(tag.to_html(2))
+        assert tag.is_valid()
+        examples.append(tag.serialize())
+
+    with open(download_path / "data.json", "w") as f:
+        ujson.dump(examples, f)
 
 
 if __name__ == '__main__':
