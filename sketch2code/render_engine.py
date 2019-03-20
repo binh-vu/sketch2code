@@ -88,7 +88,10 @@ if __name__ == '__main__':
     results = render_engine.render_pages(tags[:50])
     print(f"Render a page take: {(time.time() - start)/50:.4f} seconds")
 
-    a = imageio.imread(results[0])
+    start = time.time()
+    a = [imageio.imread(x).shape[0] for x in results]
+    print(max(a))
     for i, example in enumerate(results):
         with open(f"./tmp/example_{i}.jpg", "wb") as f:
             f.write(example)
+    print(f"Misc process take: {time.time() - start:.4f} seconds")
