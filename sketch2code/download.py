@@ -129,7 +129,7 @@ _ = ~"[ \n]*"
                 if x == 'small-title':
                     ctag.children.append(Tag("h5", [], [keep_n_words(fake.job(), 3)]))
                 elif x == 'text':
-                    ctag.children.append(Tag("p", [], [keep_n_words(fake.text(), 10)]))
+                    ctag.children.append(Tag("p", [], [keep_n_words(fake.text(), 7)]))
                 elif x == 'btn-orange':
                     ctag.children.append(
                         Tag("button", ["btn", "btn-warning"],
