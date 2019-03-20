@@ -8,10 +8,10 @@
     margin: 0px -10px;
 }
 
-.container {
+.container-fluid {
     margin-top: 10px;
 }
 
-.container:last-child {
+.container-fluid:last-child {
     margin-bottom: 10px;
 }
