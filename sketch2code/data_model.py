@@ -13,7 +13,7 @@ class Tag:
         "html": set([]),
         "nav": {"navbar", "navbar-expand-sm", "bg-light"},
         "a": {"nav-link"},
-        "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container", "grey-background"},
+        "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container-fluid", "grey-background"},
         "p": set([]),
         "h5": set([]),
         "button": {"btn", "btn-danger", "btn-warning", "btn-success"},

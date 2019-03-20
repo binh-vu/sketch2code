@@ -79,11 +79,23 @@ _ = ~"[ \n]*"
         elif node.expr_name == 'token':
             output.append(get_token(node.text))
 
+    def keep_n_words(text: str, n: int):
+        tokens = []
+        for token in text.split(" "):
+            for x in token.split("/"):
+                tokens.append(x)
+                if len(tokens) >= n:
+                    break
+
+            if len(tokens) >= n:
+                break
+        return " ".join(tokens)
+
     def tree2tag(group_node, tag: Tag):
         if group_node['name'] == 'header':
             ctag = Tag('ul', ['navbar-nav'], [])
             for x in group_node['children']:
-                atag = Tag('a', ['nav-link'], [fake.name().split(" ")[0]])
+                atag = Tag('a', ['nav-link'], [keep_n_words(fake.name(), 1)])
                 if x == 'btn-active':
                     ctag.children.append(Tag('li', ['nav-item', 'active'], [atag]))
                 elif x == 'btn-inactive':
@@ -99,7 +111,7 @@ _ = ~"[ \n]*"
                 tree2tag(x, ctag)
 
             if tag.name == 'html':
-                tag.children.append(Tag('div', ['container'], [ctag]))
+                tag.children.append(Tag('div', ['container-fluid'], [ctag]))
             else:
                 tag.children.append(ctag)
         elif group_node['name'] in {'single', 'double', 'quadruple'}:
@@ -115,15 +127,21 @@ _ = ~"[ \n]*"
             ctag = Tag('div', ['grey-background'], [])
             for x in group_node['children']:
                 if x == 'small-title':
-                    ctag.children.append(Tag("h5", [], [" ".join(fake.job().split(" ")[:3])]))
+                    ctag.children.append(Tag("h5", [], [keep_n_words(fake.job(), 3)]))
                 elif x == 'text':
-                    ctag.children.append(Tag("p", [], [" ".join(fake.text().split(" ")[:10])]))
+                    ctag.children.append(Tag("p", [], [keep_n_words(fake.text(), 10)]))
                 elif x == 'btn-orange':
-                    ctag.children.append(Tag("button", ["btn", "btn-warning"], [" ".join(fake.company().split(" ")[:2])]))
+                    ctag.children.append(
+                        Tag("button", ["btn", "btn-warning"],
+                            [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-red':
-                    ctag.children.append(Tag("button", ["btn", "btn-danger"], [" ".join(fake.company().split(" ")[:2])]))
+                    ctag.children.append(
+                        Tag("button", ["btn", "btn-danger"],
+                            [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-green':
-                    ctag.children.append(Tag("button", ["btn", "btn-success"], [" ".join(fake.company().split(" ")[:2])]))
+                    ctag.children.append(
+                        Tag("button", ["btn", "btn-success"],
+                            [keep_n_words(fake.company(), 2)]))
                 else:
                     raise NotImplementedError(f"Doesn't support type {x} yet")
             tag.children.append(Tag('div', [class_name], [ctag]))

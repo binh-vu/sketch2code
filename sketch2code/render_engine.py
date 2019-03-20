@@ -34,7 +34,7 @@ class RenderEngine:
 
     @staticmethod
     async def async_init(template_html: str, n_cpu: int, viewport_width: int, viewport_height: int):
-        browser = await launch(headless=True)
+        browser = await launch(headless=False)
         pages = []
 
         for i in range(n_cpu):
@@ -81,7 +81,7 @@ if __name__ == '__main__':
         tags = [Tag.deserialize(o) for o in ujson.load(f)]
 
     start = time.time()
-    render_engine = RenderEngine.get_instance(tags[0].to_html())
+    render_engine = RenderEngine.get_instance(tags[0].to_html(), n_cpu=3)
     print(f"Start up take: {time.time() - start:.4f} seconds")
 
     start = time.time()
