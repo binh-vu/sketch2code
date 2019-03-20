@@ -11,6 +11,8 @@ parsimonious = "*"
 faker = "*"
 ujson = "*"
 pyppeteer = "*"
+pyzmq = "*"
+imageio = "*"
 
 [requires]
-python_version = "3.6"
+python_version = "3.7"
