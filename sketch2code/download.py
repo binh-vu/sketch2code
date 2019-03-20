@@ -115,15 +115,15 @@ _ = ~"[ \n]*"
             ctag = Tag('div', ['grey-background'], [])
             for x in group_node['children']:
                 if x == 'small-title':
-                    ctag.children.append(Tag("h4", [], [fake.job()]))
+                    ctag.children.append(Tag("h5", [], [" ".join(fake.job().split(" ")[:3])]))
                 elif x == 'text':
                     ctag.children.append(Tag("p", [], [" ".join(fake.text().split(" ")[:10])]))
                 elif x == 'btn-orange':
-                    ctag.children.append(Tag("button", ["btn", "btn-warning"], [fake.company()]))
+                    ctag.children.append(Tag("button", ["btn", "btn-warning"], [" ".join(fake.company().split(" ")[:2])]))
                 elif x == 'btn-red':
-                    ctag.children.append(Tag("button", ["btn", "btn-danger"], [fake.company()]))
+                    ctag.children.append(Tag("button", ["btn", "btn-danger"], [" ".join(fake.company().split(" ")[:2])]))
                 elif x == 'btn-green':
-                    ctag.children.append(Tag("button", ["btn", "btn-success"], [fake.company()]))
+                    ctag.children.append(Tag("button", ["btn", "btn-success"], [" ".join(fake.company().split(" ")[:2])]))
                 else:
                     raise NotImplementedError(f"Doesn't support type {x} yet")
             tag.children.append(Tag('div', [class_name], [ctag]))

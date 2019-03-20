@@ -12,7 +12,7 @@ class Tag:
         "a": {"nav-link"},
         "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container", "grey-background"},
         "p": set([]),
-        "h4": set([]),
+        "h5": set([]),
         "button": {"btn", "btn-danger", "btn-warning", "btn-success"},
         "li": {"nav-item", "active"},
         "ul": {"navbar-nav"},
