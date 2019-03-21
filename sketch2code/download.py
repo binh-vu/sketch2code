@@ -1,14 +1,17 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
 import argparse
+import h5py
 import ujson
 from pathlib import Path
 
+import numpy
 from faker import Faker
 from parsimonious.grammar import Grammar
 
 from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Tag
+from sketch2code.render_engine import RenderEngine
 """
 Use to obtain the data and preprocess it to get to our desired format
 """
@@ -50,7 +53,7 @@ def download_file_from_google_drive(id, destination):
     save_response_content(response, destination)
 
 
-def download_pix2code(download_path: Path):
+def download_pix2code(download_path: Path, make_hdf5: bool = False):
     """Download file from google drive, run pre-processing to generate correct data format"""
     grammar = Grammar(r"""
 program = group_token+
@@ -132,16 +135,13 @@ _ = ~"[ \n]*"
                     ctag.children.append(Tag("p", [], [keep_n_words(fake.text(), 7)]))
                 elif x == 'btn-orange':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-warning"],
-                            [keep_n_words(fake.company(), 2)]))
+                        Tag("button", ["btn", "btn-warning"], [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-red':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-danger"],
-                            [keep_n_words(fake.company(), 2)]))
+                        Tag("button", ["btn", "btn-danger"], [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-green':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-success"],
-                            [keep_n_words(fake.company(), 2)]))
+                        Tag("button", ["btn", "btn-success"], [keep_n_words(fake.company(), 2)]))
                 else:
                     raise NotImplementedError(f"Doesn't support type {x} yet")
             tag.children.append(Tag('div', [class_name], [ctag]))
@@ -172,16 +172,36 @@ _ = ~"[ \n]*"
         assert tag.is_valid()
         examples.append(tag.serialize())
 
+    # save gui
     with open(download_path / "data.json", "w") as f:
         ujson.dump(examples, f)
+
+    if make_hdf5:
+        print("Make hdf5 file...")
+        tags = [Tag.deserialize(e) for e in examples]
+        viewport_width = 800
+        viewport_height = 750
+        render_engine = RenderEngine.get_instance(
+            tags[0].to_html(), 32, viewport_width, viewport_height)
+
+        print("Rendering pages...")
+        results = render_engine.render_pages(tags)
+        assert max(x.shape[0] for x in results) == viewport_height
+        assert max(x.shape[1] for x in results) == viewport_width
+        results = numpy.asarray(results)
+
+        print("Dumping to hdf5...")
+        with h5py.File(ROOT_DIR / "datasets/pix2code/data.hdf5", "w") as f:
+            f.create_dataset("images", data=results)
+            f.create_dataset("pages", data=examples)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download dataset for Sketch2Code')
     parser.add_argument('-d', '--datasets', metavar='N', type=str, nargs='+', choices=['pix2code'])
-
+    parser.add_argument('-c', help='whether we should create h5py file')
     args = parser.parse_args()
     datasets = {x.lower() for x in args.datasets}
 
     if 'pix2code' in datasets:
-        download_pix2code(ROOT_DIR / "datasets" / "pix2code")
+        download_pix2code(ROOT_DIR / "datasets" / "pix2code", args.c is not None)

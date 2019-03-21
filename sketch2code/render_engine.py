@@ -1,7 +1,5 @@
 import asyncio
-import traceback
 from typing import List
-from uuid import uuid4
 
 import imageio
 from pyppeteer import launch
@@ -95,7 +93,7 @@ class RenderEngine:
 
 
 if __name__ == '__main__':
-    import time, ujson, numpy as np
+    import time, ujson, h5py, numpy as np
     from sketch2code.config import ROOT_DIR
 
     with open(ROOT_DIR / "datasets/pix2code/data.json", "r") as f:
@@ -110,8 +108,10 @@ if __name__ == '__main__':
     print(f"Render a page take: {(time.time() - start) / len(results):.4f} seconds. ({len(tags)} pages)")
 
     start = time.time()
-    a = [x.shape[0] for x in results]
-    print(max(a))
+    print("max-width:", max(x.shape[0] for x in results), "max-height:", max(x.shape[1] for x in results))
+    # results = np.asarray(results)
+    # with h5py.File(ROOT_DIR / "datasets/pix2code/data.hdf5", "w") as f:
+    #     dataset = f.create_dataset("images", results.shape, dtype='f')
     # # for i, example in enumerate(results):
     # #     with open(f"./tmp/example_{i}.jpg", "wb") as f:
     # #         f.write(example)
