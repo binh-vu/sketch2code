@@ -1,5 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+import copy
 from pathlib import Path
 from typing import *
 
@@ -29,10 +30,13 @@ class Tag:
             "children": [x.serialize() if isinstance(x, Tag) else x for x in self.children]
         }
 
+    def clone(self) -> 'Tag':
+        return self.__class__(self.name, copy.copy(self.cls),
+                              [c if isinstance(c, str) else c.clone for c in self.children])
+
     def is_valid(self) -> bool:
-        return self.name in self.supported_tags and all(
-            c in self.supported_tags[self.name]
-            for c in self.cls) and all(c.is_valid() if isinstance(c, Tag) else True for c in self.children)
+        return self.name in self.supported_tags and all(c in self.supported_tags[self.name] for c in self.cls) and all(
+            c.is_valid() if isinstance(c, Tag) else True for c in self.children)
 
     def to_body(self):
         children = "\n".join(x.to_body() if isinstance(x, Tag) else x for x in self.children)
@@ -67,6 +71,19 @@ class Tag:
         return f"""{space}<{self.name} class=\"{' '.join(self.cls)}\">
 {children}
 {space}</{self.name}>"""
+
+
+class LinearizedTag:
+
+    def __init__(self, tokens: List[str], opening_tags: List[int]) :
+        self.tokens = tokens
+        self.opening_tags = opening_tags
+
+    def clone(self):
+        return LinearizedTag(copy.copy(self.tokens), copy.copy(self.opening_tags))
+
+    def to_body(self):
+        return "".join(self.tokens)
 
 
 class Pix2CodeTag(Tag):
