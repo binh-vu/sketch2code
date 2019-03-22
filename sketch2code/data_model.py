@@ -9,50 +9,37 @@ from sketch2code.helpers import read_file
 
 class Tag:
     # supported tags and its classes
-    supported_tags = {
-        "html": set([]),
-        "nav": {"navbar", "navbar-expand-sm", "bg-light"},
-        "a": {"nav-link"},
-        "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container-fluid", "grey-background"},
-        "p": set([]),
-        "h5": set([]),
-        "button": {"btn", "btn-danger", "btn-warning", "btn-success"},
-        "li": {"nav-item", "active"},
-        "ul": {"navbar-nav"},
-    }
-
-    css_files = [
-        ROOT_DIR / "datasets/css/main.css",
-        ROOT_DIR / "datasets/css/bootstrap.min.css",
-    ]
+    supported_tags = {}
+    css_files = []
     stylesheets = [read_file(fpath) for fpath in css_files]
 
-    def __init__(self, name: str, clazz: List[str], children: List[Union['Tag', str]]):
+    def __init__(self, name: str, cls: List[str], children: List[Union['Tag', str]]):
         self.name = name
-        self.clazz = clazz
+        self.cls = cls
         self.children = children
 
-    @staticmethod
-    def deserialize(o: dict):
-        return Tag(o['name'], o['class'], [Tag.deserialize(v) if isinstance(v, dict) else v for v in o['children']])
+    @classmethod
+    def deserialize(cls, o: dict):
+        return cls(o['name'], o['class'], [cls.deserialize(v) if isinstance(v, dict) else v for v in o['children']])
 
     def serialize(self):
         return {
             "name": self.name,
-            "class": self.clazz,
+            "class": self.cls,
             "children": [x.serialize() if isinstance(x, Tag) else x for x in self.children]
         }
 
     def is_valid(self) -> bool:
-        return self.name in Tag.supported_tags and all(c in Tag.supported_tags[self.name] for c in self.clazz) and all(
-            c.is_valid() if isinstance(c, Tag) else True for c in self.children)
+        return self.name in self.supported_tags and all(
+            c in self.supported_tags[self.name]
+            for c in self.cls) and all(c.is_valid() if isinstance(c, Tag) else True for c in self.children)
 
     def to_body(self):
         children = "\n".join(x.to_body() if isinstance(x, Tag) else x for x in self.children)
 
         if self.name == "html":
             return children
-        return f"<{self.name} class=\"{' '.join(self.clazz)}\">{children}</{self.name}>"
+        return f"<{self.name} class=\"{' '.join(self.cls)}\">{children}</{self.name}>"
 
     def to_html(self, indent: int = 2, continuous_indent: int = 2):
         space = " " * continuous_indent
@@ -77,6 +64,38 @@ class Tag:
 </html>
 """
 
-        return f"""{space}<{self.name} class=\"{' '.join(self.clazz)}\">
+        return f"""{space}<{self.name} class=\"{' '.join(self.cls)}\">
 {children}
 {space}</{self.name}>"""
+
+
+class Pix2CodeTag(Tag):
+    supported_tags = {
+        "html": set([]),
+        "nav": {"navbar", "navbar-expand-sm", "bg-light"},
+        "a": {"nav-link"},
+        "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container-fluid", "grey-background"},
+        "p": set([]),
+        "h5": set([]),
+        "button": {"btn", "btn-danger", "btn-warning", "btn-success"},
+        "li": {"nav-item", "active"},
+        "ul": {"navbar-nav"},
+    }
+    css_files = [
+        ROOT_DIR / "datasets/pix2code/css/main.css",
+        ROOT_DIR / "datasets/pix2code/css/bootstrap.min.css",
+    ]
+    stylesheets = [read_file(fpath) for fpath in css_files]
+
+
+class ToyTag(Tag):
+    supported_tags = {
+        "html": set([]),
+        "div": {"row", "col-12", "col-6", "col-4", "col-3", "container-fluid", "grey-background"},
+        "button": {"btn", "btn-danger", "btn-warning", "btn-success"},
+    }
+    css_files = [
+        ROOT_DIR / "datasets/toy/css/main.css",
+        ROOT_DIR / "datasets/toy/css/bootstrap.min.css",
+    ]
+    stylesheets = [read_file(fpath) for fpath in css_files]

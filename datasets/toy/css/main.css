@@ -1,0 +1,25 @@
+.grey-background {
+    background-color: #cdcdcd;
+    -webkit-border-radius: 4px;
+    -moz-border-radius: 4px;
+    border-radius: 4px;
+
+    padding: 10px;
+    margin: 0px -10px;
+}
+
+body {
+    padding-top: 10px;
+}
+body {
+    padding-bottom: 10px;
+}
+
+.row:not(:first-child) {
+    margin-top: 10px;
+}
+
+.btn {
+    width: 60px;
+    height: 30px;
+}

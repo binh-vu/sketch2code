@@ -10,7 +10,7 @@ from faker import Faker
 from parsimonious.grammar import Grammar
 
 from sketch2code.config import ROOT_DIR
-from sketch2code.data_model import Tag
+from sketch2code.data_model import Tag, Pix2CodeTag
 from sketch2code.render_engine import RenderEngine
 """
 Use to obtain the data and preprocess it to get to our desired format
@@ -53,7 +53,7 @@ def download_file_from_google_drive(id, destination):
     save_response_content(response, destination)
 
 
-def download_pix2code(download_path: Path, make_hdf5: bool = False):
+def download_pix2code(download_path: Path):
     """Download file from google drive, run pre-processing to generate correct data format"""
     grammar = Grammar(r"""
 program = group_token+
@@ -96,25 +96,25 @@ _ = ~"[ \n]*"
 
     def tree2tag(group_node, tag: Tag):
         if group_node['name'] == 'header':
-            ctag = Tag('ul', ['navbar-nav'], [])
+            ctag = Pix2CodeTag('ul', ['navbar-nav'], [])
             for x in group_node['children']:
-                atag = Tag('a', ['nav-link'], [keep_n_words(fake.name(), 1)])
+                atag = Pix2CodeTag('a', ['nav-link'], [keep_n_words(fake.name(), 1)])
                 if x == 'btn-active':
-                    ctag.children.append(Tag('li', ['nav-item', 'active'], [atag]))
+                    ctag.children.append(Pix2CodeTag('li', ['nav-item', 'active'], [atag]))
                 elif x == 'btn-inactive':
-                    ctag.children.append(Tag('li', ['nav-item'], [atag]))
+                    ctag.children.append(Pix2CodeTag('li', ['nav-item'], [atag]))
                 else:
                     raise NotImplementedError(f"Doesn't support type {x} yet")
 
-            tag.children.append(Tag('nav', ['navbar', 'navbar-expand-sm', 'bg-light'], [ctag]))
+            tag.children.append(Pix2CodeTag('nav', ['navbar', 'navbar-expand-sm', 'bg-light'], [ctag]))
         elif group_node['name'] == 'row':
-            ctag = Tag('div', ['row'], [])
+            ctag = Pix2CodeTag('div', ['row'], [])
             for x in group_node['children']:
                 assert isinstance(x, dict), f"{x} must be a group node"
                 tree2tag(x, ctag)
 
             if tag.name == 'html':
-                tag.children.append(Tag('div', ['container-fluid'], [ctag]))
+                tag.children.append(Pix2CodeTag('div', ['container-fluid'], [ctag]))
             else:
                 tag.children.append(ctag)
         elif group_node['name'] in {'single', 'double', 'quadruple'}:
@@ -127,24 +127,24 @@ _ = ~"[ \n]*"
             else:
                 raise NotImplementedError(f"Doesn't support group node {group_node['name']} yet")
 
-            ctag = Tag('div', ['grey-background'], [])
+            ctag = Pix2CodeTag('div', ['grey-background'], [])
             for x in group_node['children']:
                 if x == 'small-title':
-                    ctag.children.append(Tag("h5", [], [keep_n_words(fake.job(), 3)]))
+                    ctag.children.append(Pix2CodeTag("h5", [], [keep_n_words(fake.job(), 3)]))
                 elif x == 'text':
-                    ctag.children.append(Tag("p", [], [keep_n_words(fake.text(), 7)]))
+                    ctag.children.append(Pix2CodeTag("p", [], [keep_n_words(fake.text(), 7)]))
                 elif x == 'btn-orange':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-warning"], [keep_n_words(fake.company(), 2)]))
+                        Pix2CodeTag("button", ["btn", "btn-warning"], [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-red':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-danger"], [keep_n_words(fake.company(), 2)]))
+                        Pix2CodeTag("button", ["btn", "btn-danger"], [keep_n_words(fake.company(), 2)]))
                 elif x == 'btn-green':
                     ctag.children.append(
-                        Tag("button", ["btn", "btn-success"], [keep_n_words(fake.company(), 2)]))
+                        Pix2CodeTag("button", ["btn", "btn-success"], [keep_n_words(fake.company(), 2)]))
                 else:
                     raise NotImplementedError(f"Doesn't support type {x} yet")
-            tag.children.append(Tag('div', [class_name], [ctag]))
+            tag.children.append(Pix2CodeTag('div', [class_name], [ctag]))
         else:
             raise NotImplementedError(f"Doesn't support group node {group_node} yet")
 
@@ -164,7 +164,7 @@ _ = ~"[ \n]*"
 
         # uncomment for debug
         # print(json.dumps(tree, indent=4))
-        tag = Tag("html", [], [])
+        tag = Pix2CodeTag("html", [], [])
         for gn in tree:
             tree2tag(gn, tag)
 
@@ -173,35 +173,15 @@ _ = ~"[ \n]*"
         examples.append(tag.serialize())
 
     # save gui
-    with open(download_path / "data.json", "w") as f:
+    with open(str(download_path / "data.json"), "w") as f:
         ujson.dump(examples, f)
-
-    if make_hdf5:
-        print("Make hdf5 file...")
-        tags = [Tag.deserialize(e) for e in examples]
-        viewport_width = 800
-        viewport_height = 750
-        render_engine = RenderEngine.get_instance(
-            tags[0].to_html(), 32, viewport_width, viewport_height)
-
-        print("Rendering pages...")
-        results = render_engine.render_pages(tags)
-        assert max(x.shape[0] for x in results) == viewport_height
-        assert max(x.shape[1] for x in results) == viewport_width
-        results = numpy.asarray(results)
-
-        print("Dumping to hdf5...")
-        with h5py.File(ROOT_DIR / "datasets/pix2code/data.hdf5", "w") as f:
-            f.create_dataset("images", data=results)
-            f.create_dataset("pages", data=examples)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download dataset for Sketch2Code')
     parser.add_argument('-d', '--datasets', metavar='N', type=str, nargs='+', choices=['pix2code'])
-    parser.add_argument('-c', help='whether we should create h5py file')
     args = parser.parse_args()
     datasets = {x.lower() for x in args.datasets}
 
     if 'pix2code' in datasets:
-        download_pix2code(ROOT_DIR / "datasets" / "pix2code", args.c is not None)
+        download_pix2code(ROOT_DIR / "datasets" / "pix2code")

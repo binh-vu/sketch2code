@@ -4,5 +4,4 @@
 import os
 from pathlib import Path
 
-
-ROOT_DIR = Path(os.path.dirname(__file__)).parent
+ROOT_DIR: any = Path(os.path.dirname(__file__)).parent
