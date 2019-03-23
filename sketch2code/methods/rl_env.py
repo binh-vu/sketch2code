@@ -45,7 +45,7 @@ class Env:
         self.env_creator = env_creator
         self.goal_tag = Tag
 
-        self.state = State(sketch, goal_tag, np.ones_like(sketch), env_creator.TagClass("html", [], []))
+        self.state = State(sketch, goal_tag, np.ones_like(sketch), LinearizedTag([], []))
 
     def step(self, action: Callable[[State], Tag]):
         new_tag, new_pivot = action(self.state)

@@ -82,6 +82,15 @@ class LinearizedTag:
     def clone(self):
         return LinearizedTag(copy.copy(self.tokens), copy.copy(self.opening_tags))
 
+    def add_open_tag(self, tag_name: str):
+        self.opening_tags.append(len(self.tokens))
+        self.tokens.append(tag_name)
+
+    def add_close_tag(self) -> bool:
+        if len(self.opening_tags) == 0:
+            return False
+        self.tokens[self.opening_tags[-1]].append()
+
     def to_body(self):
         return "".join(self.tokens)
 
