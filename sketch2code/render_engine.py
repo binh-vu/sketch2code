@@ -1,12 +1,12 @@
 import asyncio
-from typing import List
+from typing import List, Union
 
 import imageio
 from pyppeteer import launch
 from pyppeteer.browser import Browser
 from pyppeteer.page import Page
 
-from sketch2code.data_model import Tag
+from sketch2code.data_model import Tag, LinearizedTag
 
 
 def patch_pyppeteer():
@@ -69,14 +69,14 @@ class RenderEngine:
 
         return browser, pages
 
-    def render_pages(self, tags: List[Tag], format='jpeg', full_page: bool = False):
+    def render_pages(self, tags: List[Union[Tag, LinearizedTag]], format='jpeg', full_page: bool = False):
         return asyncio.get_event_loop().run_until_complete(self.async_render_pages(tags, format, full_page))
 
-    def render_page(self, tag: Tag, format='jpeg', full_page: bool = False):
+    def render_page(self, tag: Union[Tag, LinearizedTag], format='jpeg', full_page: bool = False):
         return asyncio.get_event_loop().run_until_complete(
             self.async_render_page(self.pages[0], tag.to_body(), format, full_page))
 
-    async def async_render_pages(self, tags: List[Tag], format, full_page: bool):
+    async def async_render_pages(self, tags: List[Union[Tag, LinearizedTag]], format, full_page: bool):
         event_loop = asyncio.get_event_loop()
         pages, n_pages = self.pages, self.n_pages
         tasks = []

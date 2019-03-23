@@ -4,6 +4,8 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
+pytest = "*"
+pytest-pycharm = "*"
 
 [packages]
 h5py = "*"
@@ -17,6 +19,8 @@ requests = "*"
 tqdm = "*"
 ipykernel = "*"
 matplotlib = "*"
+pyrsistent = "*"
+opencv-python = "*"
 
 [requires]
 python_version = "3.7"
