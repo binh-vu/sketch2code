@@ -21,6 +21,7 @@ ipykernel = "*"
 matplotlib = "*"
 pyrsistent = "*"
 opencv-python = "*"
+tensorflow = "*"
 
 [requires]
 python_version = "3.7"

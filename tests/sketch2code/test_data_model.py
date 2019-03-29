@@ -13,8 +13,8 @@ def test_linearized_tag():
     assert tag.to_body() == "<div></div>"
 
     tag.add_open_tag("p")
-    tag.add_class("header")
-    tag.add_class("bold")
+    tag.add_class("p", "header")
+    tag.add_class("p", "bold")
 
     tag.add_text("vi sao")
 

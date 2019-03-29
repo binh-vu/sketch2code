@@ -11,7 +11,7 @@ from parsimonious.grammar import Grammar
 
 from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Tag, Pix2CodeTag
-from sketch2code.render_engine import RenderEngine
+from sketch2code.render_engine import RemoteRenderEngine
 """
 Use to obtain the data and preprocess it to get to our desired format
 """

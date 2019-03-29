@@ -6,8 +6,8 @@ import numpy as np
 from typing import *
 
 from sketch2code.data_model import Tag, LinearizedTag
-from sketch2code.helpers import norm_rgb_imgs, shrink_img
-from sketch2code.render_engine import RenderEngine
+from sketch2code.helpers import norm_rgb_imgs, shrink_img, viz_grid
+from sketch2code.render_engine import RemoteRenderEngine
 
 
 class Action:
@@ -17,8 +17,8 @@ class Action:
 
 class EnvCreator:
     def __init__(self, tags: List[Tag], sketches: List[np.ndarray], shrink_factor: float):
-        self.render_engine: RenderEngine = RenderEngine.get_instance(tags[0].to_html(), sketches[0].shape[1],
-                                                                     sketches[0].shape[0])
+        self.render_engine: RemoteRenderEngine = RemoteRenderEngine.get_instance(tags[0].to_html(), sketches[0].shape[1],
+                                                                                 sketches[0].shape[0])
 
         self.actions: List[Action] = [AddCloseTagAction()]
         for tag, classes in tags[0].supported_tags.items():
@@ -69,7 +69,12 @@ class Env:
         self.max_matching_score = np.prod(sketch.shape)
 
     def render(self):
-        return np.stack(self.obs.goal_state, self.obs.curr_state, axis=0)
+        return viz_grid(np.stack([self.obs.goal_state, self.obs.curr_state], axis=0))
+
+    def reset(self):
+        self.obs = Observation(self.obs.goal_state, self.goal_tag, np.zeros_like(self.obs.goal_state), LinearizedTag.default())
+        self.matching_score = compute_matching_score(self.obs.goal_state, self.obs.curr_state)
+        self.max_matching_score = np.prod(self.obs.goal_state.shape)
 
     def step(self, action: Action) -> Tuple[Observation, float, bool, dict]:
         new_tag = action.exec(self.obs)
@@ -82,7 +87,6 @@ class Env:
         new_score = compute_matching_score(self.obs.goal_state, new_sketch)
 
         # compute the reward
-        done = False
         if isinstance(action, AddCloseTagAction):
             reward = 0
             done = new_tag.is_valid() and new_score == self.max_matching_score
@@ -90,6 +94,9 @@ class Env:
             reward = (new_score - self.matching_score)
             done = isinstance(action, AddClassAction) and new_score == self.max_matching_score
 
+        self.obs = new_obs
+        self.matching_score = new_score
+        
         return new_obs, reward, done, {}
 
 

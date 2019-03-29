@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Pix2CodeTag, Tag, ToyTag
-from sketch2code.render_engine import RenderEngine
+from sketch2code.render_engine import RemoteRenderEngine
 
 
 def load_dataset(dset: str):
@@ -121,7 +121,7 @@ def make_dataset(dataset_name: str):
     with open(dpath, "r") as f:
         tags = [TagClass.deserialize(e) for e in ujson.load(f)]
 
-    render_engine = RenderEngine.get_instance(tags[0].to_html(), 32, viewport_width, viewport_height)
+    render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), 32, viewport_width, viewport_height)
 
     print("Rendering pages...")
     results = render_engine.render_pages(tags)
