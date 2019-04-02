@@ -320,7 +320,7 @@ if __name__ == '__main__':
         print(f"Start up take: {time.time() - start:.4f} seconds")
 
         start = time.time()
-        results = render_engine.render_pages(tags[:10])
+        results = render_engine.render_pages(tags)
         # results = [render_engine.render_page(tags[0])]
         print(
             f"Render a page take: {(time.time() - start) / len(results):.4f} seconds. ({len(results)} pages)"
