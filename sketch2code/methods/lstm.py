@@ -34,25 +34,68 @@ class LSTM(nn.Module):
 
         return Variable(hidden_a), Variable(hidden_b)
 
-    def forward(self, X, X_lengths: List[int]):
+    def init_hidden_cn(self, X, batch_size: int):
+        return Variable(torch.randn(self.n_layers, batch_size, self.hidden_size, device=X.device))
+
+    def forward(self, X, X_lengths: List[int], h0):
         """
-        :param X:
-        :param X_lengths:
+        :param X: batch sentences (N x T)
+        :param X_lengths: lengths of each sentence in batch (N)
+        :param h0: previous hidden state
         :return:
         """
-        # reset LSTM hidden state
-        batch_size, seq_len = X.shape
-        h0 = self.init_hidden(X, batch_size)
-
         # embed the input
         X = self.word_embedding(X)
 
         # pack_padded_sequence so that LSTM can record which item doesn't need to calculate gradient
         X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True)
 
-        X, h0 = self.lstm(X, h0)
+        X, hn = self.lstm(X, h0)
 
         # undo the packing operation
         X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
 
-        return X, h0
+        return X, hn
+
+
+def padded_aware_nllloss(y_pred, y, pad_idx: int=0):
+    # flatten all the labels and predictions
+    y = y.view(-1)
+    y_pred = y_pred.view(-1, y_pred.shape[-1])
+
+    mask = (y != pad_idx).float()
+    n_tokens = mask.sum().item()
+    # ignore the padding by multiple with the mask
+    y_pred = y_pred[range(y.shape[0]), y] * mask
+    ce_loss = - torch.sum(y_pred) / n_tokens
+    return ce_loss, mask, n_tokens
+
+
+
+
+
+def prepare_batch_sents(sents: List[List[int]], pad_w: int = 0, device=None):
+    assert pad_w == 0
+    sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
+    padded_sents: torch.FloatTensor = torch.zeros((len(sents), sents_lens[0][1]),
+                                                  dtype=torch.long,
+                                                  device=device)
+
+    for i, (j, nw) in enumerate(sents_lens):
+        padded_sents[i, :nw] = torch.tensor(sents[j])
+
+    return padded_sents, torch.tensor([nw for i, nw in sents_lens], device=device)
+
+
+def prepare_batch_sent_lbls(sents: List[List[int]], sent_lbls: List[List[int]], pad_idx: int = 0, device=None):
+    assert pad_idx == 0
+    sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
+
+    padded_sents = torch.zeros((len(sents), sents_lens[0][1]), dtype=torch.long, device=device)
+    padded_lbls = torch.zeros_like(padded_sents)
+
+    for i, (j, nw) in enumerate(sents_lens):
+        padded_sents[i, :nw] = torch.tensor(sents[j])
+        padded_lbls[i, :nw] = torch.tensor(sent_lbls[j])
+
+    return padded_sents, padded_lbls, torch.tensor([nw for i, nw in sents_lens], dtype=torch.long, device=device)

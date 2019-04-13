@@ -56,7 +56,7 @@ def generate_toy_data(n_examples: int):
     tags = []
     existing_tags = set()
 
-    for _ in tqdm(range(n_examples)):
+    for _ in tqdm(range(n_examples * 2)):
         n_rows = random.randint(1, max_n_rows)
         tag = ToyTag("div", ["container-fluid"], [])
 
@@ -96,10 +96,14 @@ def generate_toy_data(n_examples: int):
         existing_tags.add(tag.to_body())
         tags.append(tag)
 
+        if len(tags) >= n_examples:
+            break
+
         # with open(ROOT_DIR / "datasets/toy/test.html", "w") as f:
         #     f.write(tag.to_html())
         #     break
 
+    print("Generate total ", len(tags), "images")
     with open(ROOT_DIR / "datasets/toy/data.json", "w") as f:
         ujson.dump([o.serialize() for o in tags], f)
 
@@ -121,7 +125,7 @@ def make_dataset(dataset_name: str):
     with open(dpath, "r") as f:
         tags = [TagClass.deserialize(e) for e in ujson.load(f)]
 
-    render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), 32, viewport_width, viewport_height)
+    render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), viewport_width, viewport_height)
 
     print("Rendering pages...")
     results = render_engine.render_pages(tags)
@@ -138,12 +142,12 @@ def make_dataset(dataset_name: str):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate dataset')
     parser.add_argument('-d', '--dataset', type=str, choices=['toy'])
-    parser.add_argument('-n', '--n_examples', type=int, default=1000, help="Number of examples to generate")
+    parser.add_argument('-n', '--n_examples', type=int, default=2000, help="Number of examples to generate")
     parser.add_argument(
-        '-r', '--render', type=str, default='false', choices=['true', 'false'], help='render images for a dataset')
+        '-r', '--render', default=False, action='store_true', help='render images for a dataset')
     args = parser.parse_args()
 
-    if args.render.lower() == 'true':
+    if args.render:
         make_dataset(args.dataset)
     else:
         if args.dataset == 'toy':

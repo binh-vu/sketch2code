@@ -300,12 +300,12 @@ if __name__ == '__main__':
     parser.add_argument(
         '-d',
         '--dev',
-        type=str,
-        choices=['true', 'false'],
+        default=False,
+        action="store_true",
         help='Run some test code (not start server)')
     args = parser.parse_args()
 
-    if args.dev != 'true':
+    if not args.dev:
         asyncio.run(start_server(args.headless == 'true', args.concurrent))
     else:
         import time, h5py, numpy as np

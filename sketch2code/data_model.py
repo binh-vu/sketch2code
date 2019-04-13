@@ -35,9 +35,33 @@ class Tag:
         return self.__class__(self.name, copy.copy(self.cls),
                               [c if isinstance(c, str) else c.clone for c in self.children])
 
+    def count_dsl_tokens(self):
+        return 2 + len(self.cls) + sum([c.count_dsl_tokens() for c in self.children])
+
     def is_valid(self) -> bool:
         return self.name in self.supported_tags and all(c in self.supported_tags[self.name] for c in self.cls) and all(
             c.is_valid() if isinstance(c, Tag) else True for c in self.children)
+
+    def linearize(self, tag: 'LinearizedTag' = None) -> 'LinearizedTag':
+        if tag is None:
+            tag = LinearizedTag.default()
+
+        if self.name == 'html':
+            for c in self.children:
+                if isinstance(c, str):
+                    tag.add_text(c)
+                else:
+                    c.linearize(tag)
+            return tag
+
+        tag.add_tag_and_class(self.name, tuple(self.cls))
+        for c in self.children:
+            if isinstance(c, str):
+                tag.add_text(c)
+            else:
+                c.linearize(tag)
+        tag.add_close_tag()
+        return tag
 
     def to_body(self):
         children = "\n".join(x.to_body() if isinstance(x, Tag) else x for x in self.children)
@@ -76,67 +100,100 @@ class Tag:
 
 class LinearizedTag:
 
-    tag_reg = re.compile(r'^<([a-z0-9]+)(?: class="([a-z0-9 ]*)")?>$')
+    tag_reg = re.compile(r'^<([a-z0-9]+)(?: class="([a-z0-9 -]*)")?>$')
 
-    def __init__(self, tokens: List[str], opening_tags: List[int]):
+    def __init__(self, str_tokens: PVector, tokens: PVector, opening_tags: List[int]):
+        # List[str]
+        self.str_tokens = str_tokens
+        # List[Tuple[str, Tuple[str, ...]]]
         self.tokens = tokens
         self.opening_tags = opening_tags
 
     @staticmethod
     def default():
-        return LinearizedTag([], [])
+        return LinearizedTag(
+            pvector([]),
+            pvector([]),
+            []
+        )
 
     def clone(self):
-        return LinearizedTag(copy.copy(self.tokens), copy.copy(self.opening_tags))
+        return LinearizedTag(self.str_tokens, self.tokens, copy.copy(self.opening_tags))
 
     def add_open_tag(self, tag_name: str):
         self.opening_tags.append(len(self.tokens))
-        self.tokens.append(f"<{tag_name}>")
+        token = f"<{tag_name}>"
+        self.str_tokens = self.str_tokens.append(token)
+        self.tokens = self.tokens.append((token, ()))
+
+    def add_tag_and_class(self, tag_name: str, classes: Tuple[str, ...]):
+        self.opening_tags.append(len(self.tokens))
+        self.str_tokens = self.str_tokens.append(f'<{tag_name} class="{" ".join(classes)}">')
+        self.tokens = self.tokens.append((f"<{tag_name}>", classes))
 
     def add_close_tag(self) -> bool:
         if len(self.opening_tags) == 0:
             return False
-        tag = self.tokens[self.opening_tags[-1]]
-        self.tokens.append(f'</{tag[1:tag.find(" ")]}>')
+
+        tag = self.tokens[self.opening_tags[-1]][0][1:-1]
+        token = f"</{tag}>"
+        self.str_tokens = self.str_tokens.append(token)
+        self.tokens = self.tokens.append((token, ()))
         self.opening_tags.pop()
+        return True
 
     def add_text(self, text: str):
-        if len(self.opening_tags) > 0 and self.opening_tags[-1] != len(self.tokens):
+        last_token_idx = len(self.tokens) - 1
+        if len(self.opening_tags) > 0 and self.opening_tags[-1] != last_token_idx:
             # it means two things, either the last token is closing tag, or a text
             # we can just update it
-            self.tokens[-1] += text
+            if self.str_tokens[-1].startswith("</"):
+                self.str_tokens = self.str_tokens.append(text)
+                self.tokens = self.tokens.append((text, ()))
+            else:
+                token = self.str_tokens[last_token_idx] + text
+                self.str_tokens = self.str_tokens.set(last_token_idx, token)
+                self.tokens = self.tokens.set(last_token_idx, (token, ()))
         else:
-            self.tokens.append(text)
+            self.str_tokens = self.str_tokens.append(text)
+            self.tokens = self.tokens.append((text, ()))
 
     def add_class(self, tag_name: str, new_class: str) -> bool:
         """Add class to the most recent Tag"""
         if len(self.opening_tags) == 0:
             return False
 
-        tag = self.tokens[self.opening_tags[-1]]
-        match = self.tag_reg.match(tag)
+        update_idx = self.opening_tags[-1]
+        token, classes = self.tokens[update_idx]
 
-        if match.group(1) != tag_name:
+        if token[1:-1] != tag_name:
             return False
 
-        if match.group(2) is not None:
-            new_class = match.group(2) + " " + new_class
-        new_tag = f"<{tag_name} class=\"{new_class}\">"
-        self.tokens[self.opening_tags[-1]] = new_tag
+        classes = (*classes, new_class)
+        self.tokens = self.tokens.set(update_idx, (token, classes))
+        self.str_tokens = self.str_tokens.set(update_idx, f'<{token[1:-1]} class="{" ".join(classes)}">')
         return True
 
     def is_valid(self):
         return len(self.opening_tags) == 0
 
+    def can_add_close_tag(self) -> bool:
+        return len(self.opening_tags) > 0
+
+    def can_add_class(self, tag_name: str, new_class: str) -> bool:
+        if len(self.opening_tags) > 0:
+            token, classes = self.tokens[self.opening_tags[-1]]
+            return token[1:-1] == tag_name and new_class not in classes
+
     def to_body(self):
         if len(self.opening_tags) > 0:
             closing_tokens = []
             for i in reversed(self.opening_tags):
-                tag = self.tokens[i]
-                closing_tokens.append(f'</{tag[1:tag.find(" ")]}>')
-            return "".join(self.tokens) + "".join(closing_tokens)
+                tag = self.tokens[i][0]
+                closing_tokens.append(f'</{tag[1:-1]}>')
+            return "".join(self.str_tokens) + "".join(closing_tokens)
 
-        return "".join(self.tokens)
+        return "".join(self.str_tokens)
 
 
 class Pix2CodeTag(Tag):
@@ -169,5 +226,3 @@ class ToyTag(Tag):
         ROOT_DIR / "datasets/toy/css/bootstrap.min.css",
     ]
     stylesheets = [read_file(fpath) for fpath in css_files]
-
-
