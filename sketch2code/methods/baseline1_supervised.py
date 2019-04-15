@@ -1,13 +1,15 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
+import math
 from typing import *
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tqdm import tqdm
 
 from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
-from sketch2code.methods.lstm import LSTM
+from sketch2code.methods.lstm import LSTM, prepare_batch_sent_lbls, padded_aware_nllloss
 
 
 class BLSuper1(nn.Module):
@@ -146,3 +148,36 @@ class BLSuper2(nn.Module):
         tokens = self.hidden2token(x2)
         tokens = F.log_softmax(tokens, dim=1)
         return tokens
+
+
+def iter_batch(batch_size: int, imgs, X, y, shuffle: bool = False, device=None):
+    index = list(range(len(X)))
+    if shuffle:
+        np.random.shuffle(index)
+
+    for i in range(0, len(X), batch_size):
+        batch_idx = index[i:i + batch_size]
+        bimgs = torch.tensor([imgs[j] for j in batch_idx], dtype=torch.float32, device=device)
+        bx, by, bxlen = prepare_batch_sent_lbls([X[j] for j in batch_idx], [y[j] for j in batch_idx], device=device)
+        yield (bimgs, bx, bxlen, by)
+
+
+def eval(model, imgs, X, y, device=None):
+    losses = []
+    accuracies = []
+    n_tokens = 0
+
+    batch_size = 500
+    model.eval()
+    with torch.no_grad():
+        for bimgs, bx, bxlen, by in tqdm(iter_batch(batch_size, imgs, X, y, device=device), desc='eval',
+                                         total=math.ceil(len(X) / batch_size)):
+            by_pred = model(bimgs, bx, bxlen)
+            loss, mask, btokens = padded_aware_nllloss(by_pred, by)
+            losses.append(loss.item())
+
+            n_tokens += btokens
+            accuracies.append(((torch.argmax(by_pred, dim=1) == by.view(-1)).float() * mask).sum().item())
+
+    model.train()
+    return np.mean(losses), sum(accuracies) / n_tokens
