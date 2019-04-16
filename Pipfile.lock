@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "d63ee7d2afd2d2e6be7dad24225d0b30b7c1a22b06f31e230c396b5d144baa0f"
+            "sha256": "11e1abad167aba6783deeb800f35ddea5cc9b5dc0620c1a2f573c41cc4e2b031"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -212,6 +212,7 @@
                 "sha256:b038baa489c38f6d853a3cfc4c635b0cda66f2864d136fe8f40c1a6e334e2a6b",
                 "sha256:f5102c1cd67e399ec8ea66bcebe6e3968ea25a8977e53f012963e5affeb1fe38"
             ],
+            "markers": "python_version >= '3.3'",
             "version": "==7.4.0"
         },
         "ipython-genutils": {
@@ -220,6 +221,14 @@
                 "sha256:eb2e116e75ecef9d4d228fdc66af54269afa26ab4463042e33785b887c628ba8"
             ],
             "version": "==0.2.0"
+        },
+        "ipywidgets": {
+            "hashes": [
+                "sha256:0f2b5cde9f272cb49d52f3f0889fdd1a7ae1e74f37b48dac35a83152780d2b7b",
+                "sha256:a3e224f430163f767047ab9a042fc55adbcab0c24bbe6cf9f306c4f89fdf0ba3"
+            ],
+            "index": "pypi",
+            "version": "==7.4.2"
         },
         "jedi": {
             "hashes": [
@@ -691,6 +700,7 @@
                 "sha256:53d8f40589c903dae65f39a799c2bc49defae3703754984d90613d26ebd714a4",
                 "sha256:b664fe7772be5670d8b04200342e681af7795a12cd752709aed565c06c0cc196"
             ],
+            "index": "pypi",
             "version": "==1.13.1"
         },
         "tensorboardx": {
@@ -850,6 +860,13 @@
             ],
             "markers": "python_version >= '3'",
             "version": "==0.33.1"
+        },
+        "widgetsnbextension": {
+            "hashes": [
+                "sha256:14b2c65f9940c9a7d3b70adbe713dbd38b5ec69724eebaba034d1036cf3d4740",
+                "sha256:fa618be8435447a017fd1bf2c7ae922d0428056cfc7449f7a8641edf76b48265"
+            ],
+            "version": "==3.4.2"
         }
     },
     "develop": {

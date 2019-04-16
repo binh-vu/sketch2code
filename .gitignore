@@ -108,4 +108,5 @@ venv.bak/
 .idea
 .DS_Store
 tmp
+runs
 *.hdf5

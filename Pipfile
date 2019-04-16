@@ -24,6 +24,8 @@ opencv-python = "*"
 tensorflow = "*"
 jupyterlab = "*"
 tensorboardx = "*"
+tensorboard = "*"
+ipywidgets = "*"
 
 [requires]
 python_version = "3.7"

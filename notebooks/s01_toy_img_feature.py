@@ -1,6 +1,6 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
-
+from pathlib import Path
 from typing import *
 
 import math
@@ -9,10 +9,13 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tqdm import tqdm
+from tqdm.autonotebook import tqdm
 
+from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Tag
+from sketch2code.helpers import inc_folder_no
 from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
+from tensorboardX import SummaryWriter
 """
 Helps functions for the jupyter notebook
 """
@@ -74,55 +77,128 @@ def make_dataset(imgs: List[np.ndarray], tags: List[Tag], row_class2id: Dict[str
         nbtn_y.append(nbtn_class2id[nbtn_class])
         row_y.append(row_class2id[row_class])
 
-    return torch.tensor(X), torch.tensor(nbtn_y), torch.tensor(row_y)
+    return torch.tensor(
+        X, dtype=torch.float32), torch.tensor(
+            nbtn_y, dtype=torch.long), torch.tensor(
+                row_y, dtype=torch.long)
 
 
-def iter_batch(batch_size: int, X, y1, y2, shuffle: bool=False, device=None): 
+def iter_batch(batch_size: int, X, y1, y2, shuffle: bool = False, device=None):
     index = list(range(len(X)))
     if shuffle:
         np.random.shuffle(index)
-        
+
     for i in range(0, len(X), batch_size):
-        batch_idx = index[i:i+batch_size]
-        bx = torch.stack([X[j] for j in batch_idx]).to(device)
-        by1 = torch.tensor([y1[j] for j in batch_idx], dtype=torch.long, device=device)
-        by2 = torch.tensor([y2[j] for j in batch_idx], dtype=torch.long, device=device)
+        batch_idx = index[i:i + batch_size]
+        bx = X[batch_idx].to(device)
+        by1 = y1[batch_idx].to(device)
+        by2 = y2[batch_idx].to(device)
 
         yield (bx, by1, by2)
 
 
-def train(model: nn.Module, loss_func1, loss_func2, optimizer, X, y1, y2, n_epoches: int, batch_size: int):
-    n_epoches = 2
-    batch_size = 100
-    histories_1 = {'train': [], 'val': [], 'test': []}
-    histories_2 = {'train': [], 'val': [], 'test': []}
+def eval(model, loss_func1, loss_func2, X, y1, y2, device=None):
+    task1_losses = []
+    task1_accuracies = []
+    task2_losses = []
+    task2_accuracies = []
 
-    for i in range(n_epoches):
-        batches = tqdm(iter_batch(batch_size, X, y1, y2, shuffle=True, device=device),
-                       total=math.ceil(len(X) / batch_size))
-        for bx, by1, by2 in batches:
-            model.zero_grad()
-            by1_pred = model(bx, by1)
+    batch_size = 500
+    model.eval()
+    with torch.no_grad():
+        # for bx, by1, by2 in tqdm(
+        #         iter_batch(batch_size, X, y1, y2, device=device), desc='eval', total=math.ceil(len(X) / batch_size)):
+        for bx, by1, by2 in iter_batch(batch_size, X, y1, y2, device=device):
+            by1_pred = model.forward_task1(bx)
             loss1 = loss_func1(by1_pred, by1)
-            loss1.backward()
-            optimizer.step()
-                
-            model.zero_grad()
-            by2_pred = model(bx, by2)
+
+            by2_pred = model.forward_task2(bx)
             loss2 = loss_func2(by2_pred, by2)
-            loss2.backward()
-            optimizer.step()
-            
-            histories_1['train'].append(loss1)
-            histories_2['train'].append(loss2)
-            
-            batches.set_description(f'train_loss1 = {loss1:.5f} -- train_loss2 = {loss2:.5f}')
-            batches.refresh()
-        
-        eval
-        vloss, vacc = eval(model, valid_imgs, valid_X, valid_y, device)
-        print("Epoch", i, 'valid', f'loss={vloss:.5f}', f'acc={vacc:.5f}', flush=True)
-        tloss, tacc = eval(model, test_imgs, test_X, test_y, device)
-        print("Epoch", i, 'test', f'loss={tloss:.5f}', f'acc={tacc:.5f}', flush=True)
-        histories['val'].append((vloss, vacc))
-        histories['test'].append((tloss, tacc))
+
+            task1_losses.append(loss1.item())
+            task2_losses.append(loss2.item())
+
+            task1_accuracies.append((torch.argmax(by1_pred, dim=1) == by1).sum().item())
+            task2_accuracies.append((torch.argmax(by2_pred, dim=1) == by2).sum().item())
+
+    model.train()
+    return {
+        "task1_loss": np.mean(task1_losses),
+        "task2_loss": np.mean(task2_losses),
+        "task1_accuracies": sum(task1_accuracies) / len(X),
+        "task2_accuracies": sum(task2_accuracies) / len(X)
+    }
+
+
+def train(model: nn.Module, loss_func1, loss_func2, scheduler, optimizer, datasets, n_epoches: int, batch_size: int, device=None):
+    task1_histories = {'train': [], 'valid': [], 'test': []}
+    task2_histories = {'train': [], 'valid': [], 'test': []}
+
+    train_X, train_y1, train_y2 = datasets['train']
+    valid_X, valid_y1, valid_y2 = datasets['valid']
+    test_X, test_y1, test_y2 = datasets['test']
+
+    writer = SummaryWriter(log_dir=inc_folder_no(ROOT_DIR / "runs" / f"s01_exp_"))
+    global_step = 0
+
+    try:
+        with tqdm(
+                range(n_epoches), desc='epoch') as epoches, tqdm(
+                    total=math.ceil(len(train_X) / batch_size) * n_epoches, desc='training') as pbar:
+            for i in epoches:
+                scheduler.step()
+                for bx, by1, by2 in iter_batch(batch_size, train_X, train_y1, train_y2, shuffle=True, device=device):
+                    pbar.update()
+
+                    global_step += 1
+
+                    model.zero_grad()
+                    by1_pred = model.forward_task1(bx)
+                    loss1 = loss_func1(by1_pred, by1)
+                    loss1.backward()
+                    optimizer.step()
+
+                    model.zero_grad()
+                    by2_pred = model.forward_task2(bx)
+                    loss2 = loss_func2(by2_pred, by2)
+                    loss2.backward()
+                    optimizer.step()
+
+                    task1_histories['train'].append(loss1)
+                    task2_histories['train'].append(loss2)
+                    writer.add_scalar('train/loss1', loss1, global_step)
+                    writer.add_scalar('train/loss2', loss2, global_step)
+
+                    pbar.set_postfix(train_loss1=f"{loss1:.5f}", train_loss2=f'{loss2:.5f}')
+
+                valid_res = eval(model, loss_func1, loss_func2, valid_X, valid_y1, valid_y2, device)
+
+                epoches.set_postfix()
+                writer.add_scalar('valid/loss1', valid_res['task1_loss'], global_step)
+                writer.add_scalar('valid/loss2', valid_res['task2_loss'], global_step)
+                writer.add_scalar('valid/accuracies1', valid_res['task1_accuracies'], global_step)
+                writer.add_scalar('valid/accuracies2', valid_res['task2_accuracies'], global_step)
+
+                test_res = eval(model, loss_func1, loss_func2, test_X, test_y1, test_y2, device)
+
+                writer.add_scalar('test/loss1', test_res['task1_loss'], global_step)
+                writer.add_scalar('test/loss2', test_res['task2_loss'], global_step)
+                writer.add_scalar('test/accuracies1', test_res['task1_accuracies'], global_step)
+                writer.add_scalar('test/accuracies2', test_res['task2_accuracies'], global_step)
+
+                task1_histories['valid'].append(valid_res)
+                task2_histories['test'].append(test_res)
+
+                epoches.set_postfix(
+                    valid_l1=f'{valid_res["task1_loss"]:.5f}',
+                    valid_l2=f'{valid_res["task2_loss"]:.5f}',
+                    valid_a1=f'{valid_res["task1_accuracies"]:.5f}',
+                    valid_a2=f'{valid_res["task2_accuracies"]:.5f}',
+                    test_l1=f'{test_res["task1_loss"]:.5f}',
+                    test_l2=f'{test_res["task2_loss"]:.5f}',
+                    test_a1=f'{test_res["task1_accuracies"]:.5f}',
+                    test_a2=f'{test_res["task2_accuracies"]:.5f}',
+                )
+    finally:
+        writer.close()
+    return task1_histories, task2_histories

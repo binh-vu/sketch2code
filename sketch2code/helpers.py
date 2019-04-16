@@ -8,6 +8,25 @@ from pathlib import Path
 from typing import *
 
 
+def inc_folder_no(fpath: Path):
+    """Give a path to folder (prefix) and return path of next folder should be. for example:
+
+    input: /runs/exp_ => output is: /runs/exp_1, /runs/exp_2, ...
+    """
+    prefix = fpath.name
+    existing_dirs = []
+    for dpath in fpath.parent.iterdir():
+        if dpath.name.startswith(prefix):
+            existing_dirs.append(int(dpath.name.replace(prefix, "")))
+    existing_dirs.sort()
+
+    if len(existing_dirs) == 0:
+        new_dir = fpath.parent / f"{prefix}1"
+    else:
+        new_dir = fpath.parent / f"{prefix}{existing_dirs[-1] + 1}"
+    return str(new_dir)
+
+
 def read_file(fpath: Union[Path, str]):
     with open(fpath, 'r') as f:
         return f.read()
