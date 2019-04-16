@@ -77,24 +77,49 @@ def make_dataset(imgs: List[np.ndarray], tags: List[Tag], row_class2id: Dict[str
     return torch.tensor(X), torch.tensor(nbtn_y), torch.tensor(row_y)
 
 
-def train(model: nn.Module, loss_func, optimizer, n_epoches: int, batch_size: int):
+def iter_batch(batch_size: int, X, y1, y2, shuffle: bool=False, device=None): 
+    index = list(range(len(X)))
+    if shuffle:
+        np.random.shuffle(index)
+        
+    for i in range(0, len(X), batch_size):
+        batch_idx = index[i:i+batch_size]
+        bx = torch.stack([X[j] for j in batch_idx]).to(device)
+        by1 = torch.tensor([y1[j] for j in batch_idx], dtype=torch.long, device=device)
+        by2 = torch.tensor([y2[j] for j in batch_idx], dtype=torch.long, device=device)
+
+        yield (bx, by1, by2)
+
+
+def train(model: nn.Module, loss_func1, loss_func2, optimizer, X, y1, y2, n_epoches: int, batch_size: int):
     n_epoches = 2
     batch_size = 100
-    histories = {'train': [], 'val': [], 'test': []}
+    histories_1 = {'train': [], 'val': [], 'test': []}
+    histories_2 = {'train': [], 'val': [], 'test': []}
 
     for i in range(n_epoches):
-        batches = tqdm(iter_batch(batch_size, train_imgs, train_X, train_y, shuffle=True, device=device),
-                       total=math.ceil(len(train_X) / batch_size))
-        for bimgs, bx, bxlen, by in batches:
+        batches = tqdm(iter_batch(batch_size, X, y1, y2, shuffle=True, device=device),
+                       total=math.ceil(len(X) / batch_size))
+        for bx, by1, by2 in batches:
             model.zero_grad()
-            by_pred = model(bimgs, bx, bxlen)
-            loss, _, _ = padded_aware_nllloss(by_pred, by)
-            histories['train'].append(loss)
-            loss.backward()
-            batches.set_description(f'train_loss = {loss:.5f}')
-            batches.refresh()
+            by1_pred = model(bx, by1)
+            loss1 = loss_func1(by1_pred, by1)
+            loss1.backward()
             optimizer.step()
-
+                
+            model.zero_grad()
+            by2_pred = model(bx, by2)
+            loss2 = loss_func2(by2_pred, by2)
+            loss2.backward()
+            optimizer.step()
+            
+            histories_1['train'].append(loss1)
+            histories_2['train'].append(loss2)
+            
+            batches.set_description(f'train_loss1 = {loss1:.5f} -- train_loss2 = {loss2:.5f}')
+            batches.refresh()
+        
+        eval
         vloss, vacc = eval(model, valid_imgs, valid_X, valid_y, device)
         print("Epoch", i, 'valid', f'loss={vloss:.5f}', f'acc={vacc:.5f}', flush=True)
         tloss, tacc = eval(model, test_imgs, test_X, test_y, device)
