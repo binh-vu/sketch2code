@@ -3,9 +3,13 @@
 import math
 
 import cv2
+import h5py
 import numpy as np
 from pathlib import Path
 from typing import *
+import pickle as cpickle
+
+from sketch2code.config import ROOT_DIR
 
 
 def inc_folder_no(fpath: Path):
@@ -66,6 +70,28 @@ def viz_grid(imgs: np.ndarray, padding: int = 1, padding_color: float = 0, n_img
         y0 += H + padding
         y1 += H + padding
     return grid
+
+
+def cache_arrays(id: str, create_arrays: Callable[[], Tuple[np.ndarray]], pickle: bool=False):
+    cache_file = ROOT_DIR / "tmp" / f"cache.{id}.{'pkl' if pickle else 'hdf5'}"
+    if cache_file.exists():
+        if pickle:
+            with open(cache_file, "rb") as f:
+                return cpickle.load(f)
+        dataset = h5py.File(cache_file, "r")
+        return [dataset[k][:] for k in sorted(dataset.keys())]
+    else:
+        if pickle:
+            arrays = create_arrays()
+            with open(cache_file, "wb") as f:
+                cpickle.dump(arrays, f)
+        else:
+            with h5py.File(cache_file, "w") as f:
+                arrays = []
+                for i, array in enumerate(create_arrays()):
+                    f.create_dataset(f"a{i}", data=array)
+                    arrays.append(array)
+        return arrays
 
 
 class Placeholder:

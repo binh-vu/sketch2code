@@ -71,9 +71,6 @@ def padded_aware_nllloss(y_pred, y, pad_idx: int=0):
     return ce_loss, mask, n_tokens
 
 
-
-
-
 def prepare_batch_sents(sents: List[List[int]], pad_w: int = 0, device=None):
     assert pad_w == 0
     sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
