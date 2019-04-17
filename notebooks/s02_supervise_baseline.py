@@ -12,6 +12,7 @@ from sketch2code.methods.lstm import prepare_batch_sent_lbls, prepare_batch_sent
 from tensorboardX import SummaryWriter
 import math
 
+
 def make_toy_vocab():
     """
         Create a vocabulary of the toy dataset. Return the vocab: <token> => <index> and its reversed
@@ -96,6 +97,7 @@ def iter_batch(batch_size: int, images: torch.tensor, examples: List[List[Exampl
 def eval(model, loss_func, images, examples, device=None, batch_size=500):
     losses = []
     accuracies = []
+    n_examples = 0
 
     batch_size = 500
     model.eval()
@@ -108,11 +110,12 @@ def eval(model, loss_func, images, examples, device=None, batch_size=500):
 
             losses.append(loss.item())
             accuracies.append((torch.argmax(bypred, dim=1) == by).sum().item())
+            n_examples += by.shape[0]
 
     model.train()
     return {
-        "loss": np.mean(losses),
-        "accuracy": sum(accuracies) / len(examples),
+        "loss": sum(losses) / n_examples,
+        "accuracy": sum(accuracies) / n_examples,
     }
 
 
@@ -127,29 +130,33 @@ def train(model: nn.Module, loss_func, scheduler, optimizer, images, datasets, n
     valid_res = {'loss': float('nan'), 'accuracy': float('nan')}
     test_res = {'loss': float('nan'), 'accuracy': float('nan')}
     best_performance = 0.0
+
+    train_examples, valid_examples, test_examples = datasets
     
     try:
         with tqdm(
                 range(n_epoches), desc='epoch') as epoches, tqdm(
-                    total=math.ceil(sum([len(x) for x in datasets['train']]) / batch_size) * n_epoches, desc='training') as pbar:
+                    total=math.ceil(sum([len(x) for x in train_examples]) / batch_size) * n_epoches, desc='training') as pbar:
             for i in epoches:
                 scheduler.step()
-                for bimgs, bx, by, bxlen in iter_batch(batch_size, images, datasets['train'], shuffle=True, device=device):
+                for bimgs, bx, by, bxlen in iter_batch(batch_size, images, train_examples, shuffle=True, device=device):
                     pbar.update()
                     global_step += 1
 
                     model.zero_grad()
                     bypred = model(bimgs, bx, bxlen)
+                    accuracy = (torch.argmax(bypred, dim=1) == by).float().mean().item()
                     loss = loss_func(bypred, by)
                     loss.backward()
                     optimizer.step()
 
-                    histories['train'].append(loss)
+                    histories['train'].append((loss, accuracy))
                     writer.add_scalar('train/loss', loss, global_step)
-                    pbar.set_postfix(train_loss=f"{loss:.5f}")
+                    writer.add_scalar('train/accuracy', accuracy, global_step)
+                    pbar.set_postfix(train_loss=f"{loss:.5f}", train_accuracy=f"{accuracy:.5f}")
                 
                 if (i + 1) % eval_valid_freq == 0:
-                    valid_res = eval(model, loss_func, images, datasets['valid'], device)
+                    valid_res = eval(model, loss_func, images, valid_examples, device)
                     writer.add_scalar('valid/loss', valid_res['loss'], global_step)
                     writer.add_scalar('valid/accuracy', valid_res['accuracy'], global_step)
                     histories['valid'].append(valid_res)
@@ -159,7 +166,7 @@ def train(model: nn.Module, loss_func, scheduler, optimizer, images, datasets, n
                         torch.save(model, log_dir + f"/model.{i}.bin")
 
                 if (i + 1) % eval_test_freq == 0:
-                    test_res = eval(model, loss_func, images, datasets['test'], device)
+                    test_res = eval(model, loss_func, images, test_examples, device)
                     writer.add_scalar('test/loss', test_res['loss'], global_step)
                     writer.add_scalar('test/accuracy', test_res['accuracy'], global_step)
                     histories['test'].append(test_res)
