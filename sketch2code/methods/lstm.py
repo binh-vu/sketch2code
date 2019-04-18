@@ -8,6 +8,48 @@ from torch.autograd import Variable
 """Basic LSTM building block"""
 
 
+class LSTMNoEmbedding(nn.Module):
+    def __init__(self, input_size: int, hidden_size: int, n_layers: int):
+        super().__init__()
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.n_layers = n_layers
+
+        self.lstm: nn.LSTM
+
+        self.__build_model()
+
+    def __build_model(self):
+        self.lstm = nn.LSTM(
+            input_size=self.input_size, hidden_size=self.hidden_size, num_layers=self.n_layers, batch_first=True)
+
+    def init_hidden(self, X, batch_size: int):
+        hidden_a = torch.randn(self.n_layers, batch_size, self.hidden_size, device=X.device)
+        hidden_b = torch.randn(self.n_layers, batch_size, self.hidden_size, device=X.device)
+
+        return Variable(hidden_a), Variable(hidden_b)
+
+    def init_hidden_cn(self, X, batch_size: int):
+        return Variable(torch.randn(self.n_layers, batch_size, self.hidden_size, device=X.device))
+
+    def forward(self, X, X_lengths: List[int], h0):
+        """
+        :param X: batch sentences (N x T)
+        :param X_lengths: lengths of each sentence in batch (N)
+        :param h0: previous hidden state
+        :return:
+        """
+        # pack_padded_sequence so that LSTM can record which item doesn't need to calculate gradient
+        X = torch.nn.utils.rnn.pack_padded_sequence(X, X_lengths, batch_first=True)
+
+        X, hn = self.lstm(X, h0)
+
+        # undo the packing operation
+        X, _ = torch.nn.utils.rnn.pad_packed_sequence(X, batch_first=True)
+
+        return X, hn
+
+
 class LSTM(nn.Module):
     def __init__(self, vocab_size: int, padding_token_idx: int, embedding_dim: int, hidden_size: int, n_layers: int):
         super().__init__()
