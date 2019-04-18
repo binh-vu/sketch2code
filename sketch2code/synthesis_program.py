@@ -16,6 +16,11 @@ def wrap_next_token_func(real_next_token_func):
     return exec
 
 
+token2tag_re = re.compile("<div class=")
+def token2tag(token: str):
+    if 
+
+
 def beam_search(img: np.ndarray, vocab, next_token_func, top_k, max_depth: int=100, device=None):
     """
     :param img: is already in C x W x H
@@ -26,7 +31,7 @@ def beam_search(img: np.ndarray, vocab, next_token_func, top_k, max_depth: int=1
     :param device:
     :return:
     """
-    programs = [([vocab['<begin>']], 1)]
+    programs = [([vocab['<div class="container-fluid">']], 1)]
     results = []
 
     for i in range(max_depth):
@@ -63,4 +68,10 @@ def beam_search(img: np.ndarray, vocab, next_token_func, top_k, max_depth: int=1
         
     return results
 
-
+def html_css_syntax(program: List[int], ivocab: Dict[int, str]):
+    for prev_token, token in zip(program[:-1], program[1:]):
+        prev_token = ivocab[prev_token]
+        token = ivocab[token]
+        
+        if 
+    
