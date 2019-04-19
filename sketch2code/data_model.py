@@ -63,17 +63,17 @@ class Tag:
         tag.add_close_tag()
         return tag
 
-    def to_body(self):
-        children = "\n".join(x.to_body() if isinstance(x, Tag) else x for x in self.children)
+    def to_body(self, join_char=""):
+        children = join_char.join(x.to_body(join_char) if isinstance(x, Tag) else x for x in self.children)
 
         if self.name == "html":
             return children
         return f"<{self.name} class=\"{' '.join(self.cls)}\">{children}</{self.name}>"
 
-    def to_html(self, indent: int = 2, continuous_indent: int = 2):
+    def to_html(self, indent: int = 0, continuous_indent: int = 0, join_char=""):
         space = " " * continuous_indent
-        children = "\n".join(
-            x.to_html(indent, continuous_indent + indent) if isinstance(x, Tag) else space + (" " * indent) + x
+        children = join_char.join(
+            x.to_html(indent, continuous_indent + indent, join_char) if isinstance(x, Tag) else space + (" " * indent) + x
             for x in self.children)
 
         if self.name == "html":
@@ -81,7 +81,7 @@ class Tag:
             #     f'{space}{space}<link rel="stylesheet" href="{x.replace(str(ROOT_DIR), "http://localhost:8080")}" />'
             #     for x in self.css_files
             # ])
-            stylesheets = "\n".join([f'<style>{x}</style>' for x in self.stylesheets])
+            stylesheets = join_char.join([f'<style>{x}</style>' for x in self.stylesheets])
 
             return f"""<html>
 {space}<head>
@@ -93,9 +93,7 @@ class Tag:
 </html>
 """
 
-        return f"""{space}<{self.name} class=\"{' '.join(self.cls)}\">
-{children}
-{space}</{self.name}>"""
+        return f"""{space}<{self.name} class=\"{' '.join(self.cls)}\">{join_char}{children}{join_char}{space}</{self.name}>"""
 
 
 class LinearizedTag:
@@ -185,15 +183,15 @@ class LinearizedTag:
             token, classes = self.tokens[self.opening_tags[-1]]
             return token[1:-1] == tag_name and new_class not in classes
 
-    def to_body(self):
+    def to_body(self, join_char=""):
         if len(self.opening_tags) > 0:
             closing_tokens = []
             for i in reversed(self.opening_tags):
                 tag = self.tokens[i][0]
                 closing_tokens.append(f'</{tag[1:-1]}>')
-            return "".join(self.str_tokens) + "".join(closing_tokens)
+            return join_char.join(self.str_tokens) + join_char.join(closing_tokens)
 
-        return "".join(self.str_tokens)
+        return join_char.join(self.str_tokens)
 
 
 class Pix2CodeTag(Tag):

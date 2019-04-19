@@ -15,7 +15,7 @@ from notebooks.s01_toy_img_feature import tag2class
 from sketch2code.helpers import inc_folder_no
 from sketch2code.config import ROOT_DIR
 from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
-from sketch2code.methods.lstm import prepare_batch_sent_lbls, prepare_batch_sents, padded_aware_nllloss, \
+from sketch2code.methods.lstm import padded_aware_nllloss, \
     LSTMNoEmbedding, prepare_batch_sentences
 from tensorboardX import SummaryWriter
 import math
@@ -146,11 +146,13 @@ Example = namedtuple('Example', ['img_idx', 'context_tokens', 'next_token', 'nex
 #         return nts
 
 
-def make_dataset(tags, dsl_vocab, min_length: int, seed: int = 10232):
+def make_dataset(example_indices, tags, dsl_vocab, min_length: int, seed: int = 10232):
     # dict of examples: len(program) => [(index of image, program, next_token)]
     examples = []
-
-    for img_idx, tag in enumerate(tags):
+    
+    for i in example_indices:
+        img_idx = i
+        tag = tags[i]
         nbtn_class, row_class, _, _, _ = tag2class(tag)
         program = [dsl_vocab['<program>']]
         program += [dsl_vocab[x] for x in tag.linearize().str_tokens]
@@ -160,6 +162,15 @@ def make_dataset(tags, dsl_vocab, min_length: int, seed: int = 10232):
 
     print("#examples", len(examples))
     return examples
+
+
+def verify_dataset(oimages, examples, example2img: Callable[[Example], np.ndarray]):
+    for e in tqdm(examples):
+        eimg = example2img(e)
+        gimg = oimages[e.img_idx]
+        
+        matches = ((eimg == gimg).sum() / np.prod(eimg.shape))
+        assert matches == 1.0
 
 
 def drop_examples(examples: List[Example], keep_prob: float, seed: int = 10232):
@@ -181,12 +192,11 @@ def iter_batch(batch_size: int,
     for i in range(0, len(examples), batch_size):
         batch_examples = [examples[j] for j in index[i:i + batch_size]]
 
-        bimgs = images[[e.img_idx for e in batch_examples]]
-        bx, bnx, bxlen = prepare_batch_sentences([e.context_tokens for e in batch_examples],
+        bx, bnx, bxlen, sorted_idx = prepare_batch_sentences([e.context_tokens for e in batch_examples],
                                                   [e.next_tokens for e in batch_examples],
                                                   device=device)
-
-        yield (bimgs, bx, bnx, bxlen)
+        bimgs = images[[batch_examples[i].img_idx for i in sorted_idx]]
+        yield (bimgs, bx, bnx, bxlen, sorted_idx)
 
 
 def eval(model, images, examples, device=None, batch_size=500):
@@ -196,15 +206,15 @@ def eval(model, images, examples, device=None, batch_size=500):
 
     model.eval()
     with torch.no_grad():
-        for bimgs, bx, bx, bxlen in iter_batch(
+        for bimgs, bx, bnx, bxlen, sorted_idx in iter_batch(
                 batch_size, images, examples, device=device):
-            bnts_pred = model(bimgs, bx, bxlen)
+            bnx_pred = model(bimgs, bx, bxlen)
 
-            loss, mask, btokens = padded_aware_nllloss(bnts_pred, bx)
+            loss, mask, btokens = padded_aware_nllloss(bnx_pred, bnx)
             losses.append(loss.item() * btokens)
 
             accuracy = (
-                (torch.argmax(bnts_pred, dim=1) == bx.view(-1)).float() * mask).sum().item()
+                (torch.argmax(bnx_pred, dim=1) == bnx.view(-1)).float() * mask).sum().item()
             nts_accuracies.append(accuracy)
             n_examples += btokens
 
@@ -246,15 +256,15 @@ def train(model: nn.Module,
                     desc='training') as pbar:
             for i in epoches:
                 scheduler.step()
-                for bimgs, bx, bx, bxlen in iter_batch(
+                for bimgs, bx, bnx, bxlen, sorted_idx in iter_batch(
                         batch_size, images, train_examples, shuffle=True, device=device):
                     pbar.update()
                     global_step += 1
 
                     model.zero_grad()
                     bnx_pred = model(bimgs, bx, bxlen)
-                    loss, mask, btokens = padded_aware_nllloss(bnx_pred, bx)
-                    accuracy = ((torch.argmax(bnx_pred, dim=1) == bx.view(-1)).float() *
+                    loss, mask, btokens = padded_aware_nllloss(bnx_pred, bnx)
+                    accuracy = ((torch.argmax(bnx_pred, dim=1) == bnx.view(-1)).float() *
                                 mask).sum().item() / btokens
 
                     loss.backward()

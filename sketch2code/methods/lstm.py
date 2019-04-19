@@ -146,9 +146,9 @@ def prepare_batch_sentences(sents: List[List[int]], lbls: List[List[int]]=None, 
 
     sent_lens = torch.tensor(sent_lens, dtype=torch.long, device=device)
     sent_lens, sort_index = sent_lens.sort(dim=0, descending=True)
-
+    
     padded_sents: torch.FloatTensor = torch.zeros((len(sents), max_sent_lens), dtype=torch.long, device=device)
-    if lbls is None:
+    if lbls is not None:
         padded_lbls = torch.zeros_like(padded_sents)
         for i, sent in enumerate(sents):
             nw = len(sent)
@@ -159,7 +159,8 @@ def prepare_batch_sentences(sents: List[List[int]], lbls: List[List[int]]=None, 
         padded_lbls = padded_lbls[sort_index]
         return padded_sents, padded_lbls, sent_lens, sort_index
     else:
-        for i, (nw, sent) in enumerate(zip(sent_lens, sents)):
+        for i, sent in enumerate(sents):
+            nw = len(sent)
             padded_sents[i, :nw] = torch.tensor(sent)
 
         padded_sents = padded_sents[sort_index]

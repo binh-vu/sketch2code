@@ -25,5 +25,5 @@ body {
 }
 
 .grey-background .btn:not(:first-child) {
-    margin-left: 5px;
+    margin-left: 10px;
 }
