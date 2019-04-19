@@ -113,28 +113,54 @@ def padded_aware_nllloss(y_pred, y, pad_idx: int=0):
     return ce_loss, mask, n_tokens
 
 
-def prepare_batch_sents(sents: List[List[int]], pad_w: int = 0, device=None):
-    assert pad_w == 0
-    sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
-    padded_sents: torch.FloatTensor = torch.zeros((len(sents), sents_lens[0][1]),
-                                                  dtype=torch.long,
-                                                  device=device)
+# def prepare_batch_sents(sents: List[List[int]], pad_w: int = 0, device=None):
+#     assert pad_w == 0
+#     sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
+#     padded_sents: torch.FloatTensor = torch.zeros((len(sents), sents_lens[0][1]),
+#                                                   dtype=torch.long,
+#                                                   device=device)
+#
+#     for i, (j, nw) in enumerate(sents_lens):
+#         padded_sents[i, :nw] = torch.tensor(sents[j])
+#
+#     return padded_sents, torch.tensor([nw for i, nw in sents_lens], device=device)
+#
+#
+# def prepare_batch_sent_lbls(sents: List[List[int]], sent_lbls: List[List[int]], pad_idx: int = 0, device=None):
+#     assert pad_idx == 0
+#     sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
+#
+#     padded_sents = torch.zeros((len(sents), sents_lens[0][1]), dtype=torch.long, device=device)
+#     padded_lbls = torch.zeros_like(padded_sents)
+#
+#     for i, (j, nw) in enumerate(sents_lens):
+#         padded_sents[i, :nw] = torch.tensor(sents[j])
+#         padded_lbls[i, :nw] = torch.tensor(sent_lbls[j])
+#
+#     return padded_sents, padded_lbls, torch.tensor([nw for i, nw in sents_lens], dtype=torch.long, device=device)
 
-    for i, (j, nw) in enumerate(sents_lens):
-        padded_sents[i, :nw] = torch.tensor(sents[j])
 
-    return padded_sents, torch.tensor([nw for i, nw in sents_lens], device=device)
+def prepare_batch_sentences(sents: List[List[int]], lbls: List[List[int]]=None, device=None):
+    sent_lens = [len(s) for s in sents]
+    max_sent_lens = max(sent_lens)
 
+    sent_lens = torch.tensor(sent_lens, dtype=torch.long, device=device)
+    sent_lens, sort_index = sent_lens.sort(dim=0, descending=True)
 
-def prepare_batch_sent_lbls(sents: List[List[int]], sent_lbls: List[List[int]], pad_idx: int = 0, device=None):
-    assert pad_idx == 0
-    sents_lens = sorted([(i, len(s)) for i, s in enumerate(sents)], key=lambda x: x[1], reverse=True)
+    padded_sents: torch.FloatTensor = torch.zeros((len(sents), max_sent_lens), dtype=torch.long, device=device)
+    if lbls is None:
+        padded_lbls = torch.zeros_like(padded_sents)
+        for i, sent in enumerate(sents):
+            nw = len(sent)
+            padded_sents[i, :nw] = torch.tensor(sent)
+            padded_lbls[i, :nw] = torch.tensor(lbls[i])
 
-    padded_sents = torch.zeros((len(sents), sents_lens[0][1]), dtype=torch.long, device=device)
-    padded_lbls = torch.zeros_like(padded_sents)
+        padded_sents = padded_sents[sort_index]
+        padded_lbls = padded_lbls[sort_index]
+        return padded_sents, padded_lbls, sent_lens, sort_index
+    else:
+        for i, (nw, sent) in enumerate(zip(sent_lens, sents)):
+            padded_sents[i, :nw] = torch.tensor(sent)
 
-    for i, (j, nw) in enumerate(sents_lens):
-        padded_sents[i, :nw] = torch.tensor(sents[j])
-        padded_lbls[i, :nw] = torch.tensor(sent_lbls[j])
-
-    return padded_sents, padded_lbls, torch.tensor([nw for i, nw in sents_lens], dtype=torch.long, device=device)
+        padded_sents = padded_sents[sort_index]
+        return padded_sents, sent_lens, sort_index

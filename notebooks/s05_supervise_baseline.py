@@ -15,7 +15,8 @@ from notebooks.s01_toy_img_feature import tag2class
 from sketch2code.helpers import inc_folder_no
 from sketch2code.config import ROOT_DIR
 from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
-from sketch2code.methods.lstm import prepare_batch_sent_lbls, prepare_batch_sents, padded_aware_nllloss, LSTMNoEmbedding
+from sketch2code.methods.lstm import prepare_batch_sent_lbls, prepare_batch_sents, padded_aware_nllloss, \
+    LSTMNoEmbedding, prepare_batch_sentences
 from tensorboardX import SummaryWriter
 import math
 
@@ -42,7 +43,6 @@ def make_toy_vocab():
 
 
 Example = namedtuple('Example', ['img_idx', 'context_tokens', 'next_token', 'next_tokens'])
-
 
 # class BLSuper5(nn.Module):
 #
@@ -155,9 +155,9 @@ def make_dataset(tags, dsl_vocab, min_length: int, seed: int = 10232):
         program = [dsl_vocab['<program>']]
         program += [dsl_vocab[x] for x in tag.linearize().str_tokens]
         program.append(dsl_vocab['</program>'])
-        
+
         examples.append(Example(img_idx, program[:-1], program[-1], program[1:]))
-        
+
     print("#examples", len(examples))
     return examples
 
@@ -169,28 +169,25 @@ def drop_examples(examples: List[Example], keep_prob: float, seed: int = 10232):
     return examples
 
 
-def iter_batch(batch_size: int, images: torch.tensor, examples: List[Example], shuffle: bool = False,
+def iter_batch(batch_size: int,
+               images: torch.tensor,
+               examples: List[Example],
+               shuffle: bool = False,
                device=None):
     index = list(range(len(examples)))
-    bnt, bnbtn, bnrow = None, None, None
-
     if shuffle:
         random.shuffle(index)
 
     for i in range(0, len(examples), batch_size):
         batch_examples = [examples[j] for j in index[i:i + batch_size]]
-        
+
         bimgs = images[[e.img_idx for e in batch_examples]]
-        bx, bnts, bxlen = prepare_batch_sent_lbls([e.context_tokens for e in batch_examples],
-                                                 [e.next_tokens for e in batch_examples],
-                                                 device=device)
+        bx, bnx, bxlen = prepare_batch_sentences([e.context_tokens for e in batch_examples],
+                                                  [e.next_tokens for e in batch_examples],
+                                                  device=device)
 
-        # bnt = torch.tensor([e.next_token for e in batch_examples], dtype=torch.long, device=device)
-        # bnbtn = torch.tensor([e.nbtn_class for e in batch_examples], dtype=torch.long, device=device)
-        # bnrow = torch.tensor([e.row_class for e in batch_examples], dtype=torch.long, device=device)
+        yield (bimgs, bx, bnx, bxlen)
 
-        yield (bimgs, bx, bnts, bxlen, bnt, bnbtn, bnrow)
-        
 
 def eval(model, images, examples, device=None, batch_size=500):
     losses = []
@@ -199,13 +196,15 @@ def eval(model, images, examples, device=None, batch_size=500):
 
     model.eval()
     with torch.no_grad():
-        for bimgs, bx, bnts, bxlen, bnt, bnbtn, bnrow in iter_batch(batch_size, images, examples, device=device):
+        for bimgs, bx, bx, bxlen in iter_batch(
+                batch_size, images, examples, device=device):
             bnts_pred = model(bimgs, bx, bxlen)
 
-            loss, mask, btokens = padded_aware_nllloss(bnts_pred, bnts)
+            loss, mask, btokens = padded_aware_nllloss(bnts_pred, bx)
             losses.append(loss.item() * btokens)
 
-            accuracy = ((torch.argmax(bnts_pred, dim=1) == bnts.view(-1)).float() * mask).sum().item()
+            accuracy = (
+                (torch.argmax(bnts_pred, dim=1) == bx.view(-1)).float() * mask).sum().item()
             nts_accuracies.append(accuracy)
             n_examples += btokens
 
@@ -247,15 +246,16 @@ def train(model: nn.Module,
                     desc='training') as pbar:
             for i in epoches:
                 scheduler.step()
-                for bimgs, bx, bnts, bxlen, bnt, bnbtn, bnrow in iter_batch(
+                for bimgs, bx, bx, bxlen in iter_batch(
                         batch_size, images, train_examples, shuffle=True, device=device):
                     pbar.update()
                     global_step += 1
 
                     model.zero_grad()
-                    bnts_pred = model(bimgs, bx, bxlen)
-                    loss, mask, btokens = padded_aware_nllloss(bnts_pred, bnts)
-                    accuracy = ((torch.argmax(bnts_pred, dim=1) == bnts.view(-1)).float() * mask).sum().item() / btokens
+                    bnx_pred = model(bimgs, bx, bxlen)
+                    loss, mask, btokens = padded_aware_nllloss(bnx_pred, bx)
+                    accuracy = ((torch.argmax(bnx_pred, dim=1) == bx.view(-1)).float() *
+                                mask).sum().item() / btokens
 
                     loss.backward()
                     clip_grad_norm_(model.parameters(), 1)  # prevent vanishing
@@ -264,9 +264,7 @@ def train(model: nn.Module,
                     writer.add_scalar('train/loss', loss, global_step)
                     writer.add_scalar('train/accuracy', accuracy, global_step)
 
-                    pbar.set_postfix(
-                        loss=f"{loss:.5f}",
-                        accuracy=f"{accuracy:.5f}")
+                    pbar.set_postfix(loss=f"{loss:.5f}", accuracy=f"{accuracy:.5f}")
 
                 if (i + 1) % eval_valid_freq == 0:
                     valid_res = eval(model, images, valid_examples, device, batch_size=500)
