@@ -13,6 +13,7 @@ from tqdm import tqdm
 
 from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Pix2CodeTag, Tag, ToyTag
+from sketch2code.helpers import shrink_img
 from sketch2code.render_engine import RemoteRenderEngine
 
 
@@ -66,7 +67,7 @@ def generate_toy_data(n_examples: int):
 
             if n_cols == 1:
                 col_class = "col-12"
-                max_n_btn = 7
+                max_n_btn = 6
             elif n_cols == 2:
                 col_class = "col-6"
                 max_n_btn = 3
@@ -101,6 +102,9 @@ def generate_toy_data(n_examples: int):
 
         # with open(ROOT_DIR / "datasets/toy/test.html", "w") as f:
         #     f.write(tag.to_html())
+        #     render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), 480, 300)
+        #     img = render_engine.render_page(tag)
+        #     imageio.imwrite(str(ROOT_DIR / "datasets/toy/test.jpeg"), shrink_img(img, 0.5))
         #     break
 
     print("Generate total ", len(tags), "images")

@@ -41,8 +41,8 @@ def norm_rgb_imgs(imgs: np.ndarray, dtype=np.float32) -> np.ndarray:
     return np.divide((255 - imgs), 255, dtype=dtype)
 
 
-def shrink_img(img: np.ndarray, scale_factor: float) -> np.ndarray:
-    return cv2.resize(img, None, fx=scale_factor, fy=scale_factor, interpolation=cv2.INTER_AREA)
+def shrink_img(img: np.ndarray, scale_factor: float, interpolation=cv2.INTER_AREA) -> np.ndarray:
+    return cv2.resize(img, None, fx=scale_factor, fy=scale_factor, interpolation=interpolation)
 
 
 def viz_grid(imgs: np.ndarray, padding: int = 1, padding_color: float = 0, n_img_w: Optional[int] = None):

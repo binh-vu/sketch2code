@@ -23,3 +23,7 @@ body {
     width: 60px;
     height: 30px;
 }
+
+.grey-background .btn:not(:first-child) {
+    margin-left: 5px;
+}
