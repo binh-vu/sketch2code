@@ -68,6 +68,9 @@ class Tag:
 
         if self.name == "html":
             return children
+
+        if len(self.cls) == 0:
+            return f"<{self.name}>{children}</{self.name}>"
         return f"<{self.name} class=\"{' '.join(self.cls)}\">{children}</{self.name}>"
 
     def to_html(self, indent: int = 0, continuous_indent: int = 0, join_char=""):
@@ -92,7 +95,8 @@ class Tag:
 {space}</body>
 </html>
 """
-
+        if len(self.cls) == 0:
+            return f"""{space}<{self.name}>{join_char}{children}{join_char}{space}</{self.name}>"""
         return f"""{space}<{self.name} class=\"{' '.join(self.cls)}\">{join_char}{children}{join_char}{space}</{self.name}>"""
 
 
@@ -197,14 +201,11 @@ class LinearizedTag:
 class Pix2CodeTag(Tag):
     supported_tags = {
         "html": set([]),
-        "nav": {"navbar", "navbar-expand-sm", "bg-light"},
-        "a": {"nav-link"},
-        "div": {"row", "col-sm-12", "col-sm-6", "col-sm-3", "container-fluid", "grey-background"},
+        "nav": set([]),
+        "div": {"row", "col-12", "col-6", "col-3", "container-fluid", "grey-background"},
         "p": set([]),
         "h5": set([]),
-        "button": {"btn", "btn-danger", "btn-warning", "btn-success"},
-        "li": {"nav-item", "active"},
-        "ul": {"navbar-nav"},
+        "button": {"btn", "btn-danger", "btn-warning", "btn-success", "btn-primary", "btn-secondary"},
     }
     css_files = [
         ROOT_DIR / "datasets/pix2code/css/main.css",
