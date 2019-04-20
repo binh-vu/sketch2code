@@ -72,25 +72,15 @@ def viz_grid(imgs: np.ndarray, padding: int = 1, padding_color: float = 0, n_img
     return grid
 
 
-def cache_arrays(id: str, create_arrays: Callable[[], Tuple[np.ndarray]], pickle: bool=False):
-    cache_file = ROOT_DIR / "tmp" / f"cache.{id}.{'pkl' if pickle else 'hdf5'}"
+def cache_object(id: str, create_arrays: Callable[[], Any]):
+    cache_file = ROOT_DIR / "tmp" / f"cache.{id}.pkl"
     if cache_file.exists():
-        if pickle:
-            with open(cache_file, "rb") as f:
-                return cpickle.load(f)
-        dataset = h5py.File(cache_file, "r")
-        return [dataset[k][:] for k in sorted(dataset.keys())]
+        with open(cache_file, "rb") as f:
+            return cpickle.load(f)
     else:
-        if pickle:
-            arrays = create_arrays()
-            with open(cache_file, "wb") as f:
-                cpickle.dump(arrays, f)
-        else:
-            with h5py.File(cache_file, "w") as f:
-                arrays = []
-                for i, array in enumerate(create_arrays()):
-                    f.create_dataset(f"a{i}", data=array)
-                    arrays.append(array)
+        arrays = create_arrays()
+        with open(cache_file, "wb") as f:
+            cpickle.dump(arrays, f)
         return arrays
 
 

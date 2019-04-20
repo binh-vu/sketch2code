@@ -144,10 +144,10 @@ def evaluate(model, loss_func, images, examples, device=None, batch_size=500):
             n_tokens = bnx.shape[0]
             top_k_acc = seq_accuracy(bnx_pred, bnx, [1, 3, 5])
 
-            loss.update(float(loss_func(bnx_pred, bnx)) * n_tokens, n_tokens)
-            top_1_acc.update(top_k_acc[0] * n_tokens, n_tokens)
-            top_3_acc.update(top_k_acc[1] * n_tokens, n_tokens)
-            top_5_acc.update(top_k_acc[2] * n_tokens, n_tokens)
+            loss.update(float(loss_func(bnx_pred, bnx)), n_tokens)
+            top_1_acc.update(top_k_acc[0], n_tokens)
+            top_3_acc.update(top_k_acc[1], n_tokens)
+            top_5_acc.update(top_k_acc[2], n_tokens)
     model.train()
     return {'loss': loss, "top_1_acc": top_1_acc, "top_3_acc": top_3_acc, "top_5_acc": top_5_acc}
 
@@ -171,8 +171,8 @@ def train(model: nn.Module,
     global_step = 0
     model.train()
 
-    valid_res = {'loss': AverageMeter(), 'accuracy': AverageMeter()}
-    test_res = {'loss': AverageMeter(), 'accuracy': AverageMeter()}
+    valid_res = {'loss': AverageMeter(), 'top_1_acc': AverageMeter(), 'top_3_acc': AverageMeter(), 'top_5_acc': AverageMeter()}
+    test_res = {'loss': AverageMeter(), 'top_1_acc': AverageMeter(), 'top_3_acc': AverageMeter(), 'top_5_acc': AverageMeter()}
     best_performance = 0.0
 
     train_examples, valid_examples, test_examples = datasets
@@ -212,20 +212,20 @@ def train(model: nn.Module,
                     writer.add_scalar('train/top_3_acc', top_k_acc[1], global_step)
 
                     n_tokens = bnx.shape[0]
-                    batch_loss.update(loss * n_tokens, n_tokens)
-                    batch_top_1_acc.update(top_k_acc[0] * n_tokens, n_tokens)
-                    batch_top_3_acc.update(top_k_acc[1] * n_tokens, n_tokens)
+                    batch_loss.update(loss, n_tokens)
+                    batch_top_1_acc.update(top_k_acc[0], n_tokens)
+                    batch_top_3_acc.update(top_k_acc[1], n_tokens)
 
-                    pbar.set_postfix(loss=f"{loss:.5f}", top_1_acc=f"{top_k_acc[0]:.5f}", top_3_acc=f"{top_k_acc[3]:.5f}")
+                    pbar.set_postfix(loss=f"{loss:.5f}", top_1_acc=f"{top_k_acc[0]:.5f}", top_3_acc=f"{top_k_acc[1]:.5f}")
 
                 if (i + 1) % eval_valid_freq == 0:
                     valid_res = evaluate(
-                        model, images, valid_examples, device, batch_size=eval_batch_size)
+                        model, loss_func, images, valid_examples, device, batch_size=eval_batch_size)
                     for k, v in valid_res.items():
                         writer.add_scalar(f'valid/{k}', v.avg, global_step)
 
-                    if valid_res['accuracy'].avg > best_performance:
-                        best_performance = valid_res['accuracy'].avg
+                    if valid_res['top_1_acc'].avg > best_performance:
+                        best_performance = valid_res['top_1_acc'].avg
                         torch.save({
                             "epoch": i,
                             "model": model.state_dict(),
@@ -234,7 +234,7 @@ def train(model: nn.Module,
 
                 if (i + 1) % eval_test_freq == 0:
                     test_res = evaluate(
-                        model, images, test_examples, device, batch_size=eval_batch_size)
+                        model, loss_func, images, test_examples, device, batch_size=eval_batch_size)
                     for k, v in test_res.items():
                         writer.add_scalar(f'test/{k}', v.avg, global_step)
 
@@ -259,22 +259,44 @@ if __name__ == '__main__':
     """Test if these utility functions are running correctly"""
     import numpy as np
     from sketch2code.datasets import load_dataset
+    from sketch2code.helpers import *
 
     tags, oimages = load_dataset("toy")
-    vocab, ivocab = make_toy_vocab_v1()
+    print("#examples", len(tags))
+    
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), 480, 300)
+    vocab, ivocab = make_toy_vocab_v1()
+    
+    def preprocess_img():
+        global oimages
+        return [shrink_img(img, 0.4, cv2.INTER_NEAREST).transpose((2, 0, 1)) for img in norm_rgb_imgs(oimages[:])]
+
+    images = cache_object("toy.shrink.imgs", preprocess_img)
+    images = torch.tensor(images, device=device)
     train_examples, valid_examples, test_examples = get_toy_dataset_v1(tags, vocab)
-
+    
     # TODO: uncomment to test the data
-    def verify_dataset(oimages, examples, example2img: Callable[[Example], np.ndarray]):
-        for e in tqdm(examples):
-            eimg = example2img(e)
-            gimg = oimages[e.img_idx]
+#     def verify_dataset(oimages, examples, example2img: Callable[[Example], np.ndarray]):
+#         for e in tqdm(examples):
+#             eimg = example2img(e)
+#             gimg = oimages[e.img_idx]
 
-            matches = ((eimg == gimg).sum() / np.prod(eimg.shape))
-            assert matches == 1.0
+#             matches = ((eimg == gimg).sum() / np.prod(eimg.shape))
+#             assert matches == 1.0
 
-    example2img = lambda e: HTMLProgram.from_int_tokens(e.context_tokens, ivocab).render_img(render_engine)
-    verify_dataset(oimages, train_examples, example2img)
-    verify_dataset(oimages, valid_examples, example2img)
-    verify_dataset(oimages, test_examples, example2img)
+#     example2img = lambda e: HTMLProgram.from_int_tokens(e.context_tokens, ivocab).render_img(render_engine)
+#     verify_dataset(oimages, train_examples, example2img)
+#     verify_dataset(oimages, valid_examples, example2img)
+#     verify_dataset(oimages, test_examples, example2img)
+    
+    # TODO: uncomment to double check if iter_batch function is correct
+    for examples in [train_examples, valid_examples, test_examples]:
+        for bimgs, bx, bnx, bxlen, sorted_idx in tqdm(iter_batch(200, images, examples, True, device)):
+            for gimg, x in tqdm(zip(bimgs, bx), total=200):
+                p = HTMLProgram.from_int_tokens([w for w in x.tolist() if w > 0], ivocab)
+
+                gimg = gimg.permute((1, 2, 0)).clone().cpu().numpy()
+                eimg = shrink_img(norm_rgb_imgs(p.render_img(render_engine)), 0.4, cv2.INTER_NEAREST)
+                matches = ((eimg == gimg).sum() / np.prod(eimg.shape))
+                assert matches == 1.0, matches

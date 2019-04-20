@@ -157,7 +157,7 @@ def synthesize(gui: torch.tensor, ogui, render_engine, ivocab, vocab, next_token
     results = []
 
     for d in range(max_depth):
-        print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", d)
+#         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", d)
         # for p in programs[:5]:
         #     print('>>', f"{p.prob:.5f}", f"{p.quality if p.quality is not None else float('nan'):.5f}", [ivocab[w] for w in p.to_int_tokens(vocab)])
 
@@ -171,8 +171,8 @@ def synthesize(gui: torch.tensor, ogui, render_engine, ivocab, vocab, next_token
         for i in range(nts.shape[0]):
             program = programs[i]
             for j in range(top_k):
-                nt = ivocab[nts[i, -1, j].item()]
-                nt_prob = nt_probs[i, -1, j].exp().item()
+                nt = ivocab[int(nts[i, -1, j])]
+                nt_prob = float(nt_probs[i, -1, j].exp())
 
                 if j > 0 and nt_probs[i, -1, j - 1].exp() - nt_prob > 0.7:
                     # the gap is too huge
