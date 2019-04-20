@@ -102,7 +102,7 @@ def generate_toy_data(n_examples: int):
         ujson.dump([o.serialize() for o in tags], f)
 
 
-def make_pix2code(pix2code_dir: Path):
+def make_pix2code(pix2code_dir: Path, output_dir: Path, skip_on_error: bool=False):
     """Download file from google drive, run pre-processing to generate correct data format"""
     grammar = Grammar(r"""
 program = group_token+
@@ -201,7 +201,7 @@ _ = ~"[ \n]*"
             raise NotImplementedError(f"Doesn't support group node {group_node} yet")
 
     tags = []
-    trace = {}
+    trace = []
 
     for file in sorted(pix2code_dir.iterdir()):
         if not file.name.endswith(".gui"):
@@ -209,8 +209,15 @@ _ = ~"[ \n]*"
 
         with open(file, 'r') as f:
             dsl = f.read().replace("\n", " ")
+        
+        try:
+            program = grammar.parse(dsl)
+        except:
+            print(f"Error while parsing {file.name}. Cannot parse program:", dsl)
+            if not skip_on_error:
+                raise
+            continue
 
-        program = grammar.parse(dsl)
         tree = []
         for c in program.children:
             read_peg(c, tree)
@@ -223,10 +230,11 @@ _ = ~"[ \n]*"
         tag = Pix2CodeTag("html", [], [tag])
         assert tag.is_valid(), tag.to_body("\n")
         tags.append(tag)
-        trace[file.stem] = {
+        trace.append({
+            "file": file.stem,
             "dsl": dsl,
             "tag": tag.serialize()
-        }
+        })
 
         # # TODO: uncomment to debug
         # if file.stem == "0BA2A4B4-4193-4506-8818-31564225EF8B":
@@ -241,10 +249,10 @@ _ = ~"[ \n]*"
         #         imageio.imwrite(str(ROOT_DIR / "datasets/pix2code/test.jpeg"), shrink_img(img, 0.5))
         #         break
 
-    with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.json"), "w") as f:
+    with open(str(output_dir / "data.json"), "w") as f:
         ujson.dump([o.serialize() for o in tags], f)
                                           
-    with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.trace.json"), "w") as f:
+    with open(str(output_dir / "data.trace.json"), "w") as f:
         ujson.dump(trace, f)
 
 
@@ -300,4 +308,4 @@ if __name__ == '__main__':
         if args.dataset == 'toy':
             generate_toy_data(args.n_examples)
         elif args.dataset == "pix2code":
-            make_pix2code(ROOT_DIR / "../all_data")
+            make_pix2code(ROOT_DIR / "../all_data", ROOT_DIR / "datasets" / "pix2code")

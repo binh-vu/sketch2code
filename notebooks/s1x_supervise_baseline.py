@@ -46,6 +46,29 @@ def make_toy_vocab_v1():
     return vocab, ivocab
 
 
+def make_pix2code_vocab_v1():
+    """
+    The first version of a vocabulary for the pix2code dataset, which follow the same principle in the toy v1 vocabulary
+    """
+    _tokens = []
+    for c in ["row", "col-12", "col-6", "col-3", "container-fluid", "grey-background"]:
+        _tokens.append(f'<div class="{c}">')
+    
+    for c in ["btn", "btn-danger", "btn-warning", "btn-success", "btn-primary", "btn-secondary"]:
+        _tokens.append(f'<button class="btn {c}">')
+    
+    for w in ["</div>", "</button>", "<nav>", "</nav>", "<h5>", "</h5>", "<p>", "</p>", "#text"]:
+        _tokens.append(w)
+    
+    vocab = {'<pad>': 0, '<program>': 1, '</program>': 2}
+    for i, token in enumerate(_tokens, start=len(vocab)):
+        vocab[token] = i
+
+    assert len(vocab) == len(_tokens) + 3
+    ivocab = {v: k for k, v in vocab.items()}
+    return vocab, ivocab
+
+
 def make_dataset_v1(example_indices, tags, dsl_vocab) -> List[Example]:
     """Create datasets using the vocabulary of the same version"""
     examples = []

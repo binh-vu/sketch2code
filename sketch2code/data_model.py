@@ -28,8 +28,15 @@ class Tag:
         return {
             "name": self.name,
             "class": self.cls,
-            "children": [x.serialize() if isinstance(x, Tag) else x for x in self.children]
+            "children": [x if isinstance(x, str) else x.serialize() for x in self.children]
         }
+    
+    def is_equal(self, another: 'Tag'):
+        return self.name == another.name \
+               and self.cls == another.cls \
+               and len(self.children) == len(another.children) \
+               and all((c == ac if isinstance(c, str) else c.is_equal(ac) for c, ac in zip(self.children, another.children)))
+            
 
     def clone(self) -> 'Tag':
         return self.__class__(self.name, copy.copy(self.cls),
@@ -42,29 +49,29 @@ class Tag:
         return self.name in self.supported_tags and all(c in self.supported_tags[self.name] for c in self.cls) and all(
             c.is_valid() if isinstance(c, Tag) else True for c in self.children)
 
-    def linearize(self, tag: 'LinearizedTag' = None) -> 'LinearizedTag':
+    def linearize(self, tag: 'LinearizedTag' = None, replace_text: bool=False) -> 'LinearizedTag':
         if tag is None:
             tag = LinearizedTag.default()
 
         if self.name == 'html':
             for c in self.children:
                 if isinstance(c, str):
-                    tag.add_text(c)
+                    tag.add_text('#text' if replace_text else c)
                 else:
-                    c.linearize(tag)
+                    c.linearize(tag, replace_text)
             return tag
 
         tag.add_tag_and_class(self.name, tuple(self.cls))
         for c in self.children:
             if isinstance(c, str):
-                tag.add_text(c)
+                tag.add_text('#text' if replace_text else c)
             else:
-                c.linearize(tag)
+                c.linearize(tag, replace_text)
         tag.add_close_tag()
         return tag
 
     def to_body(self, join_char=""):
-        children = join_char.join(x.to_body(join_char) if isinstance(x, Tag) else x for x in self.children)
+        children = join_char.join(x if isinstance(x, str) else x.to_body(join_char) for x in self.children)
 
         if self.name == "html":
             return children
@@ -130,7 +137,11 @@ class LinearizedTag:
 
     def add_tag_and_class(self, tag_name: str, classes: Tuple[str, ...]):
         self.opening_tags.append(len(self.tokens))
-        self.str_tokens = self.str_tokens.append(f'<{tag_name} class="{" ".join(classes)}">')
+        
+        if len(classes) == 0:
+            self.str_tokens = self.str_tokens.append(f'<{tag_name}>')
+        else:
+            self.str_tokens = self.str_tokens.append(f'<{tag_name} class="{" ".join(classes)}">')
         self.tokens = self.tokens.append((f"<{tag_name}>", classes))
 
     def add_close_tag(self) -> bool:
