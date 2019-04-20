@@ -201,12 +201,14 @@ _ = ~"[ \n]*"
             raise NotImplementedError(f"Doesn't support group node {group_node} yet")
 
     tags = []
+    origin_dsls = []
     for file in sorted(pix2code_dir.iterdir()):
         if not file.name.endswith(".gui"):
             continue
 
         with open(file, 'r') as f:
             dsl = f.read().replace("\n", " ")
+            origin_dsls.append(dsl)
 
         program = grammar.parse(dsl)
         tree = []
@@ -237,9 +239,12 @@ _ = ~"[ \n]*"
 
     with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.json"), "w") as f:
         ujson.dump([o.serialize() for o in tags], f)
+                                          
+    with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.original.json"), "w") as f:
+        ujson.dump(origin_dsls, f)
 
 
-def make_dataset(dataset_name: str):
+def make_dataset(dataset_name: str, full_page: bool=False):
     print("Make hdf5 file...")
     dpath = ROOT_DIR / f"datasets/{dataset_name}/data.json"
     if dataset_name == "pix2code":
@@ -257,9 +262,9 @@ def make_dataset(dataset_name: str):
         tags = [TagClass.deserialize(e) for e in ujson.load(f)]
 
     render_engine = RemoteRenderEngine.get_instance(tags[0].to_html(), viewport_width,
-                                                    viewport_height)
+                                                    viewport_height, full_page=full_page)
 
-    print("Rendering pages...")
+    print("\t+ Rendering pages...")
     results = render_engine.render_pages(tags)
 
     assert max(x.shape[1]
@@ -269,7 +274,7 @@ def make_dataset(dataset_name: str):
         for x in results) == viewport_height, f"Max height: {max(x.shape[0] for x in results)}"
     results = np.asarray(results)
 
-    print("Dumping to hdf5...")
+    print("\t+ Dumping to hdf5...")
     with h5py.File(ROOT_DIR / f"datasets/{dataset_name}/data.hdf5", "w") as f:
         f.create_dataset("images", data=results)
 
@@ -281,10 +286,12 @@ if __name__ == '__main__':
         '-n', '--n_examples', type=int, default=2000, help="Number of examples to generate")
     parser.add_argument(
         '-r', '--render', default=False, action='store_true', help='render images for a dataset')
+    parser.add_argument(
+        '-f', '--full_page', default=False, action='store_true', help='whether we should render the whole page')
     args = parser.parse_args()
 
     if args.render:
-        make_dataset(args.dataset)
+        make_dataset(args.dataset, args.full_page)
     else:
         if args.dataset == 'toy':
             generate_toy_data(args.n_examples)
