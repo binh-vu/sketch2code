@@ -201,14 +201,14 @@ _ = ~"[ \n]*"
             raise NotImplementedError(f"Doesn't support group node {group_node} yet")
 
     tags = []
-    origin_dsls = []
+    trace = {}
+
     for file in sorted(pix2code_dir.iterdir()):
         if not file.name.endswith(".gui"):
             continue
 
         with open(file, 'r') as f:
             dsl = f.read().replace("\n", " ")
-            origin_dsls.append(dsl)
 
         program = grammar.parse(dsl)
         tree = []
@@ -223,6 +223,10 @@ _ = ~"[ \n]*"
         tag = Pix2CodeTag("html", [], [tag])
         assert tag.is_valid(), tag.to_body("\n")
         tags.append(tag)
+        trace[file.stem] = {
+            "dsl": dsl,
+            "tag": tag.serialize()
+        }
 
         # # TODO: uncomment to debug
         # if file.stem == "0BA2A4B4-4193-4506-8818-31564225EF8B":
@@ -240,8 +244,8 @@ _ = ~"[ \n]*"
     with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.json"), "w") as f:
         ujson.dump([o.serialize() for o in tags], f)
                                           
-    with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.original.json"), "w") as f:
-        ujson.dump(origin_dsls, f)
+    with open(str(ROOT_DIR / "datasets" / "pix2code" / "data.trace.json"), "w") as f:
+        ujson.dump(trace, f)
 
 
 def make_dataset(dataset_name: str, full_page: bool=False):
