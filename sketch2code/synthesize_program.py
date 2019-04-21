@@ -19,6 +19,7 @@ def wrap_next_token_func(real_next_token_func):
         tokens = torch.tensor(tokens, device=img.device)
         img = img.view(1, *img.shape).expand(tokens.shape[0], *img.shape)
         return real_next_token_func(img, tokens, program_lens)
+
     return exec
 
 
@@ -70,7 +71,7 @@ class HTMLProgram:
         probs = self.tprobs.append(prob)
 
         return HTMLProgram(tags, opening_tags, self.prob * prob, probs)
-    
+
     def add_special_token(self, token, prob: float):
         tags = self.tags.append((token, self.SPECIAL_TOKEN, ()))
         probs = self.tprobs.append(prob)
@@ -79,7 +80,7 @@ class HTMLProgram:
     def to_int_tokens(self, vocab: Dict[str, int]):
         int_tokens = []
         for tag in self.tags:
-            if tag[1] == self.OPEN_TAG: # is opening
+            if tag[1] == self.OPEN_TAG:  # is opening
                 if len(tag[2]) == 0:
                     int_tokens.append(vocab[f'<{tag[0]}>'])
                 else:
@@ -114,7 +115,7 @@ class HTMLProgram:
         else:
             if token == "#text":
                 return token, HTMLProgram.SPECIAL_TOKEN, None
-                                            
+
             match = LinearizedTag.tag_reg.match(token)
             tag = match.group(1)
             if match.group(2) is None:
@@ -159,38 +160,48 @@ def preprocess_image(preprocessed_img: np.ndarray, device=None):
     return torch.tensor(img, device=device)
 
 
-def compare_programs(programs: List[HTMLProgram], gui: np.ndarray, render_engine: RemoteRenderEngine):
+def compare_programs(programs: List[HTMLProgram], gui: np.ndarray,
+                     render_engine: RemoteRenderEngine):
     imgs = render_engine.render_pages([p.to_linearized_tag() for p in programs])
     return (np.asarray(imgs) == gui).reshape((len(programs), -1)).sum(axis=1) / np.prod(gui.shape)
 
 
-def synthesize(gui: torch.tensor, ogui, render_engine, ivocab, vocab, next_token_func: Callable[[torch.tensor, List[List[int]]], List[List[Tuple[int, float]]]], branch_factor: int, beam_width: int, min_quality: float=0.9, max_unexamined_program: int=3, max_depth: int=100, report_tqdm: bool=False):
+def synthesize(
+        target_img: torch.tensor,
+        ivocab,
+        vocab,
+        next_token_func: Callable[[torch.tensor, List[List[int]]], List[List[Tuple[int, float]]]],
+        should_stop: Callable[[List[HTMLProgram]], bool],
+        search_guidance: Callable[[List[HTMLProgram]], List[HTMLProgram]],
+        branch_factor: int,
+        beam_width: int,
+        max_depth: int = 100,
+        report_tqdm: bool = False):
     """
-    :param gui: a preprocessed image of the gui, which is already in C x W x H
-    :param vocab:
+    :param target_img: a preprocessed image of the gui, which is already in C x W x H
+    :param ivocab: inverse of vocabulary
+    :param vocab: vocabulary
     :param next_token_func: return list of next tokens and its prob
+    :param should_stop: telling if we have found the desired program and we should stop searching
+    :param search_guidance: modifying the search states using information got from executing the program
     :param branch_factor:
+    :param beam_width:
     :param max_depth:
-    :param device:
+    :param report_tqdm:
     :return:
     """
-    programs: List[HTMLProgram] = [
-        HTMLProgram.default().add_tag("program", (), 1.0)
-    ]
+    programs: List[HTMLProgram] = [HTMLProgram.default().add_tag("program", (), 1.0)]
     results = []
 
-    for d in (tqdm(range(max_depth)) if report_tqdm else range(max_depth)):
-#         print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>", d)
-        # for p in programs[:5]:
-        #     print('>>', f"{p.prob:.5f}", f"{p.quality if p.quality is not None else float('nan'):.5f}", [ivocab[w] for w in p.to_int_tokens(vocab)])
-
-        ntss: List[List[Tuple[int, float]]] = next_token_func(gui, [x.to_int_tokens(vocab) for x in programs], top_k=branch_factor)
+    for _ in (tqdm(range(max_depth)) if report_tqdm else range(max_depth)):
+        ntss: List[List[Tuple[int, float]]] = next_token_func(
+            target_img, [x.to_int_tokens(vocab) for x in programs], top_k=branch_factor)
         next_programs = []
-              
+
         for nts, program in zip(ntss, programs):
             for j, (nt, nt_prob) in enumerate(nts):
                 nt = ivocab[nt]
-                if j > 0 and nts[j - 1][1] - nt_prob > 0.7:
+                if j > 0 and nts[j - 1][1] / nt_prob >= 5:
                     # the gap is too huge
                     break
 
@@ -217,34 +228,15 @@ def synthesize(gui: torch.tensor, ogui, render_engine, ivocab, vocab, next_token
 
                 next_programs.append(next_program)
 
-        # for p, q in zip(next_programs, compare_programs(next_programs, ogui, render_engine)):
-        #     p.quality = q
         next_programs.sort(key=lambda x: x.prob, reverse=True)
+        # execute the program to obtain more information and modify the next programs we should exploit to
+        next_programs = search_guidance(next_programs)
         programs = next_programs[:beam_width]
 
-        # we filter out the results list to eliminate not good program, we filter the list of undesired images
-        unexamined_programs = [p for p in results if p.quality is None]
-        if len(unexamined_programs) >= max_unexamined_program:
-            qualities = compare_programs(unexamined_programs, ogui, render_engine)
-            for i, q in enumerate(qualities):
-                unexamined_programs[i].quality = q
-            results = [p for p in results if p.quality >= min_quality]
-
-        if len(results) == beam_width:
-            break
-
-        if len(programs) == 0:
+        if should_stop(results) or len(results) == beam_width or len(programs) == 0:
+            # no more program
             break
 
     if len(results) == 0:
         results = programs[:beam_width]
-
-    unexamined_programs = [p for p in results if p.quality is None]
-    if len(unexamined_programs) > 0:
-        qualities = compare_programs(unexamined_programs, ogui, render_engine)
-        for i, q in enumerate(qualities):
-            unexamined_programs[i].quality = q
-
-    # results = [p for p in results if p.quality >= min_quality]
-    results.sort(key=lambda p: p.quality, reverse=True)
     return results
