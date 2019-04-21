@@ -63,18 +63,19 @@ class EncoderV1(nn.Module):
 
 class DecoderV1(nn.Module):
 
-    def __init__(self, img_repr_size: int, dsl_vocab, dsl_hidden_dim, dsl_embedding_dim):
+    def __init__(self, img_repr_size: int, dsl_vocab, dsl_hidden_dim, dsl_embedding_dim, padding_idx: int=0):
         super().__init__()
         self.img_repr_size = img_repr_size
         self.dsl_vocab = dsl_vocab
         self.dsl_hidden_dim = dsl_hidden_dim
         self.dsl_embedding_dim = dsl_embedding_dim
+        self.padding_idx = padding_idx
 
         self.__build_model()
 
     def __build_model(self):
         self.word_embedding = nn.Embedding(
-            num_embeddings=len(self.dsl_vocab), embedding_dim=self.dsl_embedding_dim, padding_idx=vocab['<pad>'])
+            num_embeddings=len(self.dsl_vocab), embedding_dim=self.dsl_embedding_dim, padding_idx=self.padding_idx)
         self.lstm = LSTMNoEmbedding(
             input_size=self.dsl_embedding_dim + self.img_repr_size,
             hidden_size=self.dsl_hidden_dim,
@@ -99,7 +100,7 @@ class DecoderV1(nn.Module):
         # flatten from N x T x H to (N * T) x H
         x2 = x2.contiguous().view(-1, self.dsl_hidden_dim)
         nts = F.log_softmax(self.lstm2token(x2), dim=1)
-        return nts.view(batch_size, -1, nts.shape[-1])
+        return nts.view(batch_size, -1, nts.shape[-1])  # N x T x H
 
 
 class BLSuperV1(nn.Module):

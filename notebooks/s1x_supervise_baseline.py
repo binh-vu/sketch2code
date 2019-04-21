@@ -77,7 +77,7 @@ def make_dataset_v1(example_indices, tags, dsl_vocab) -> List[Example]:
         tag = tags[i]
         program = [
             dsl_vocab[x] for x in chain(['<program>'],
-                                        tag.linearize().str_tokens, ['</program>'])
+                                        tag.linearize(replace_text=True).str_tokens, ['</program>'])
         ]
         examples.append(Example(img_idx, program[:-1], program[1:]))
 
@@ -88,6 +88,15 @@ def make_dataset_v1(example_indices, tags, dsl_vocab) -> List[Example]:
 def get_toy_dataset_v1(tags, vocab):
     indices = list(range(len(tags)))
 
+    train_examples = make_dataset_v1(indices[:1250], tags, vocab)
+    valid_examples = make_dataset_v1(indices[1250:1500], tags, vocab)
+    test_examples = make_dataset_v1(indices[1500:], tags, vocab)
+
+    return train_examples, valid_examples, test_examples
+
+
+def get_pix2code_dataset_v1(tags, vocab):
+    indices = list(range(len(tags)))
     train_examples = make_dataset_v1(indices[:1250], tags, vocab)
     valid_examples = make_dataset_v1(indices[1250:1500], tags, vocab)
     test_examples = make_dataset_v1(indices[1500:], tags, vocab)
@@ -190,6 +199,7 @@ def train(model: nn.Module,
           device=None,
           exp_dir: str = "exp"):
     log_dir = inc_folder_no(ROOT_DIR / "runs" / exp_dir / "run_")
+    print("log_dir:", log_dir)
     writer = SummaryWriter(log_dir=log_dir)
     global_step = 0
     model.train()

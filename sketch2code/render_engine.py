@@ -139,10 +139,20 @@ class RemoteRenderEngine:
             RemoteRenderEngine.instance = RemoteRenderEngine(template_html, format, full_page,
                                                              viewport_width, viewport_height)
 
-        if template_html != RemoteRenderEngine.instance.template_html and viewport_width != RemoteRenderEngine.instance.viewport_width and viewport_height != RemoteRenderEngine.instance.viewport_height and format != RemoteRenderEngine.instance.format and full_page != RemoteRenderEngine.instance.full_page:
+        if template_html != RemoteRenderEngine.instance.template_html \
+                or viewport_width != RemoteRenderEngine.instance.viewport_width \
+                or viewport_height != RemoteRenderEngine.instance.viewport_height \
+                or format != RemoteRenderEngine.instance.format \
+                or full_page != RemoteRenderEngine.instance.full_page:
             raise Exception("Cannot re-create new instance of RemoteRenderEngine")
 
         return RemoteRenderEngine.instance
+
+    @staticmethod
+    def destroy():
+        if RemoteRenderEngine.instance is not None:
+            del RemoteRenderEngine.instance
+            RemoteRenderEngine.instance = None
 
     def render_pages(self, tags: List[Union[Tag, LinearizedTag]]):
         self.master_socket.send_string(
