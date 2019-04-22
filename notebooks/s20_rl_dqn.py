@@ -158,7 +158,7 @@ class TeacherV1(Teacher):
         obs.feedback = copy.copy(prev_obs.feedback)
         obs.feedback.append(answer_structure)
 
-        return match_img + answer_structure
+        return TeachFeedback(match_img + answer_structure, match_img / self.max_reward)
 
     def compare_student_img(self, current_gui: np.ndarray):
         credits = 0

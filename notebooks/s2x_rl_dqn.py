@@ -201,7 +201,7 @@ class Env:
         self.obs = Observation(env_idx, np.zeros_like(env_creator.sketches[env_idx]), LinearizedTag.default())
         self.teacher: Teacher = None
 
-    def set_sponsor(self, teacher: Teacher):
+    def set_teacher(self, teacher: Teacher):
         self.teacher = teacher
 
     def get_target_state(self):
