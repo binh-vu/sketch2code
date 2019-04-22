@@ -1,3 +1,4 @@
+import copy
 import random, math
 import torch, numpy as np
 import torch.nn as nn
@@ -125,8 +126,15 @@ class DQN(nn.Module):
         return self.decoder(x1, x2, x2lens)
 
 
-class RewardFunc:
-    def __init__(self, target_gui: np.ndarray):
+class TeacherV1(Teacher):
+    # tag is about to open => its parent
+    open_tag_penalties = {"div": {"<button>"}, "button": {"<button>"}}
+    disjoint_classes_penalties = {
+        "<div>": {"row", "col-12", "col-6", "col-4", "col-3", "container-fluid", "grey-background"},
+        "<button>": {"btn-danger", "btn-warning", "btn-success"},
+    }
+
+    def __init__(self, target_gui: np.ndarray, grade_scale: int=10):
         self.H, self.W, self.C = target_gui.shape
         self.WC = self.W * self.C
         self.end_content_row = self.H
@@ -136,12 +144,28 @@ class RewardFunc:
                 break
         self.target_gui = target_gui
         self.max_reward = self.end_content_row * self.W
+        self.grade_scale = grade_scale
 
-    def reward(self, current_gui: np.ndarray):
+    def reward4ignorance(self) -> float:
+        return -self.grade_scale * 0.5
+
+    def reward(self, prev_obs: Observation, obs: Observation, action: Action) -> TeacherReward:
+        match_img = self.compare_student_img(obs.img)
+        answer_structure = self.checking_answer_structure(prev_obs, action)
+
+        if prev_obs.feedback is None:
+            prev_obs.feedback = []
+        obs.feedback = copy.copy(prev_obs.feedback)
+        obs.feedback.append(answer_structure)
+
+        return match_img + answer_structure
+
+    def compare_student_img(self, current_gui: np.ndarray):
         credits = 0
         max_scanned_col = self.W
 
-        # step 1: figure out the end-content-row of current gui, we can safely start from the end-content-row of target_gui
+        # step 1: figure out the end-content-row of current gui,
+        # we can safely start from the end-content-row of target_gui
         curr_end_content_row = 0
         for i in range(self.end_content_row - 1, -1, -1):
             if current_gui[i].sum() > 0:
@@ -163,71 +187,41 @@ class RewardFunc:
 
         # the rest from target_gui empty content is empty space, any match here will be deducted to your credit
         neg_credits = (self.target_gui[self.end_content_row:] != current_gui[self.end_content_row:]).sum() / self.C
-        return (credits - neg_credits) / self.max_reward * 10
+        return (credits - neg_credits) / self.max_reward * self.grade_scale
 
+    def checking_answer_structure(self, prev_obs: Observation, action: Action):
+        curr_tag = prev_obs.tag
+        if action.action_type == AddOpenTagAndClassAction.action_type:
+            action: AddOpenTagAndClassAction
+            if len(curr_tag.opening_tags) > 0:
+                prev_token, prev_classes = curr_tag.tokens[curr_tag.opening_tags[-1]]
+                if prev_token in self.open_tag_penalties[action.tag]:
+                    return -self.grade_scale * 0.5
 
-# tag is about to open => its parent
-open_tag_penalties = {"div": {"<button>"}, "button": {"<button>"}}
-disjoint_classes_penalties = {
-    "<div>": {"row", "col-12", "col-6", "col-4", "col-3", "container-fluid", "grey-background"},
-    "<button>": {"btn-danger", "btn-warning", "btn-success"},
-}
+                if prev_token == "<div>" and action.tag == "div":
+                    # layout constraint
+                    # should not have nested container
+                    violate_layout_constraint = action.classes[0].startswith("container-fluid")
+                    violate_layout_constraint = violate_layout_constraint or (action.classes[0].startswith("col-")
+                                                                              and not prev_classes[0].startswith("row"))
+                    violate_layout_constraint = violate_layout_constraint or (action.classes[0].startswith("row") and
+                                                                              not prev_classes[0].startswith(
+                                                                                  "container"))
+                    # should not have duplicated class
+                    violate_layout_constraint = violate_layout_constraint or (action.classes[0] == prev_classes[0])
+                    # row follows by col
+                    violate_layout_constraint = violate_layout_constraint or (not action.classes[0].startswith('col-')
+                                                                              and prev_classes[0].startswith("row"))
 
+                    if violate_layout_constraint:
+                        return -self.grade_scale * 0.5
+            else:
+                if not (action.tag == "div" and action.classes[0].startswith("container-fluid")):
+                    # top level should be container
+                    return -self.grade_scale * 0.5
 
-def compute_semantic_penalty(obs: Observation, action: Action, max_penalty: float):
-    global open_tag_penalties, disjoint_classes_penalties
-    curr_tag = obs.tag
-    if action.action_type == AddOpenTagAction.action_type:
-        action: AddOpenTagAction
-        if len(curr_tag.opening_tags) > 0 and curr_tag.tokens[curr_tag.opening_tags[-1]][0] in open_tag_penalties[
-                action.tag_name]:
-            return max_penalty
-
-        return 0
-    elif action.action_type == AddOpenTagAndClassAction.action_type:
-        action: AddOpenTagAndClassAction
-        if len(curr_tag.opening_tags) > 0:
-            prev_token, prev_classes = curr_tag.tokens[curr_tag.opening_tags[-1]]
-
-            if prev_token in open_tag_penalties[action.tag]:
-                return max_penalty
-
-            if prev_token == "<div>" and action.tag == "div":
-                # layout constraint
-
-                # should not have nested container
-                violate_layout_constraint = action.classes[0].startswith("container-fluid")
-                violate_layout_constraint = violate_layout_constraint or (action.classes[0].startswith("col-")
-                                                                          and not prev_classes[0].startswith("row"))
-                violate_layout_constraint = violate_layout_constraint or (action.classes[0].startswith("row") and
-                                                                          not prev_classes[0].startswith("container"))
-                # should not have duplicated class
-                violate_layout_constraint = violate_layout_constraint or (action.classes[0] == prev_classes[0])
-                # row follows by col
-                violate_layout_constraint = violate_layout_constraint or (not action.classes[0].startswith('col-')
-                                                                          and prev_classes[0].startswith("row"))
-
-                if violate_layout_constraint:
-                    return max_penalty
-        else:
-            if not (action.tag == "div" and action.classes[0].startswith("container")):
-                # top level should be container
-                return max_penalty
-
-        return 0
-    elif action.action_type == AddClassAction.action_type:
-        action: AddClassAction
-        # invalid action has been filter out
-        token, classes = curr_tag.tokens[curr_tag.opening_tags[-1]]
-        disjoint_classes = disjoint_classes_penalties[token]
-        if action.cls in disjoint_classes and any(c in disjoint_classes for c in classes):
-            return max_penalty
-
-        return 0
-    elif action.action_type == AddCloseTagAction.action_type:
-        return 0
-
-    raise Exception("Invalid action", action)
+            return 0.0
+        return 0.0
 
 
 def train(policy_q,

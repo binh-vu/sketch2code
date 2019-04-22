@@ -28,10 +28,11 @@ class Action:
 
 
 class Observation:
-    def __init__(self, env_idx: int, img: np.ndarray, tag: LinearizedTag):
+    def __init__(self, env_idx: int, img: np.ndarray, tag: LinearizedTag, feedback=None):
         self.env_idx = env_idx
         self.tag = tag
         self.img = img
+        self.feedback = feedback  # to store feedback from teacher
 
 
 class AddOpenTagAction(Action):
@@ -174,21 +175,34 @@ class EnvCreator:
         return img
 
 
+TeacherReward = namedtuple("TeacherReward", ["reward", "progress"])
+
+
+class Teacher:
+
+    def reward4ignorance(self) -> float:
+        """Return a reward if student make an obvious wrong action"""
+        raise NotImplementedError()
+
+    def reward(self, prev_obs: Observation, obs: Observation, action: Action) -> TeacherReward:
+        """Compute a reward based on the current observation"""
+        raise NotImplementedError()
+
+    def should_retry(self, obs: Observation) -> bool:
+        """Telling if student would need to retry the lesson"""
+        raise NotImplementedError()
+
+
 class Env:
     def __init__(self, env_creator: EnvCreator, env_idx: int):
         self.env_creator = env_creator
         self.env_idx = env_idx
 
         self.obs = Observation(env_idx, np.zeros_like(env_creator.sketches[env_idx]), LinearizedTag.default())
-        self.abs_reward = 0
-        self.max_abs_reward = None
-        self.reward_func = None
-        self.invalid_action_penalty = -10
+        self.teacher: Teacher = None
 
-    def set_reward_func(self, reward_func, max_reward):
-        self.reward_func = reward_func
-        self.abs_reward = 0
-        self.max_abs_reward = max_reward
+    def set_sponsor(self, teacher: Teacher):
+        self.teacher = teacher
 
     def get_target_state(self):
         return self.env_creator.sketches[self.env_idx]
@@ -199,30 +213,18 @@ class Env:
 
     def reset(self):
         self.obs = Observation(self.env_idx, np.zeros_like(self.get_target_state()), LinearizedTag.default())
-        self.abs_reward = 0
 
     def step(self, action: Action) -> Tuple[Observation, float, bool, dict]:
         new_tag = action.exec(self.obs)
         if new_tag is None:
             # penalty
-            return self.obs, self.invalid_action_penalty, False, {}
+            return self.obs, self.teacher.reward4ignorance(), False, {}
 
         new_sketch = self.env_creator.render_img(new_tag)
-        new_obs = Observation(self.env_idx, new_sketch, new_tag)
-        new_abs_reward = self.reward_func(new_sketch)
-
-        # compute the reward
-        if isinstance(action, AddCloseTagAction):
-            diff_reward = 0
-            done = new_tag.is_valid() and new_abs_reward == self.max_abs_reward
-        else:
-            diff_reward = (new_abs_reward - self.abs_reward)
-            done = isinstance(action, AddClassAction) and new_abs_reward == self.max_abs_reward
-
-        self.obs = new_obs
-        self.abs_reward = new_abs_reward
-
-        return new_obs, diff_reward, done, {}
+        next_obs = Observation(self.env_idx, new_sketch, new_tag)
+        teacher_feedback = self.teacher.reward(self.obs, next_obs, action)
+        self.obs = next_obs
+        return self.obs, teacher_feedback.reward, teacher_feedback.progress == 1.0, {}
 
 
 Transition = namedtuple('Transition', ('env_idx', 'curr_state', 'next_state', 'action', 'abs_reward', 'reward', 'done'))
