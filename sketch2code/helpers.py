@@ -46,6 +46,9 @@ def shrink_img(img: np.ndarray, scale_factor: float, interpolation=cv2.INTER_ARE
 
 
 def viz_grid(imgs: np.ndarray, padding: int = 1, padding_color: float = 0, n_img_w: Optional[int] = None):
+    is_greyscale = len(imgs.shape) == 3
+    if is_greyscale:
+        imgs = imgs.reshape(*imgs.shape, 1)
     N, H, W, C = imgs.shape
 
     if n_img_w is None:
@@ -69,6 +72,9 @@ def viz_grid(imgs: np.ndarray, padding: int = 1, padding_color: float = 0, n_img
             x1 += W + padding
         y0 += H + padding
         y1 += H + padding
+        
+    if is_greyscale:
+        grid = grid[..., 0]
     return grid
 
 

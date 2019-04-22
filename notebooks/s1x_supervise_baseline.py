@@ -2,7 +2,7 @@ import math
 import random
 from collections import namedtuple
 from itertools import chain
-from typing import List, Callable
+from typing import List, Callable, Tuple
 
 import torch
 import torch.nn as nn
@@ -122,6 +122,7 @@ def iter_batch(batch_size: int,
             [e.context_tokens for e in batch_examples], [e.next_tokens for e in batch_examples],
             device=device)
         bimgs = images[[batch_examples[i].img_idx for i in sorted_idx]]
+        bimgs = bimgs.to(device)
         yield (bimgs, bx, bnx, bxlen, sorted_idx)
 
 
@@ -139,6 +140,20 @@ class AverageMeter(object):
         self.sum += val * n
         self.count += n
         self.avg = self.sum / self.count
+        
+        
+def accuracy_measure(gold_program: List[int], pred_program: List[int]):
+    n_matches_token = 0
+    # append to make the lengths of the programs equal, but make sure the appended token raise a mismatch
+    if len(gold_program) >= len(pred_program):
+        a, b = gold_program, pred_program
+    else:
+        a, b = gold_program, pred_program
+    for i in range(len(a) - len(b)):
+        b.append(-999)    
+    for w0, w1 in zip(a, b):
+        n_matches_token += int(w0 == w1)
+    return n_matches_token / len(a)
 
 
 def seq_accuracy(bnx_pred, bnx, top_ks: List[int]):
@@ -286,6 +301,42 @@ def train(model: nn.Module,
                 )
     finally:
         writer.close()
+        
+        
+class BasicDeveloper:
+    
+    def __init__(self, batch_size, tag, oimage):
+        self.batch_size = batch_size
+        self.tag = tag
+        self.oimage = oimage
+        
+    def predict_next_tokens(self, img, programs: List[List[int]], top_k: int) -> List[List[Tuple[int, float]]]:
+        """Compute the next tokens of programs and their probabilities"""
+        results = []
+
+        for i in range(0, len(programs), self.batch_size):
+            # prepare data
+            bx = programs[i:i+self.batch_size]
+            bx, bxlen, sorted_idx = prepare_batch_sentences(bx, device=device)
+            bimgs = img.view(1, *img.shape).expand(bx.shape[0], *img.shape)
+            bnx_pred = model(bimgs, bx, bxlen)
+            
+            # do thing because the order was changed
+            bresults = []
+            for i in range(bnx_pred.shape[0]):
+                nx_pred = bnx_pred[i, bxlen[i] - 1].exp()
+                nx_probs, nx = torch.sort(nx_pred, dim=0, descending=True)
+                bresults.append([(int(nx[j]), float(nx_probs[j])) for j in range(top_k)])
+            for i in sorted_idx:
+                results.append(bresults[int(i)])
+
+        return results
+
+    def should_stop(self, programs: List[HTMLProgram]):
+        return False
+
+    def search_guidance(self, programs: List[HTMLProgram]):
+        return programs
 
 
 if __name__ == '__main__':

@@ -36,7 +36,9 @@ class HTMLProgram:
         "button": {"button"},
         "div": {"button"},
         "nav": {"button"},
-        "program": {"div", "button", "nav", "a", "#text"}
+        "program": {"div", "button", "nav", "a", "#text"},
+        "h5": {"button"},
+        "p": {"button"}
     }
 
     def __init__(self, tags: PVector, opening_tags: PVector, prob: float, tprobs: PVector):
@@ -195,14 +197,16 @@ def synthesize(
 
     for _ in (tqdm(range(max_depth)) if report_tqdm else range(max_depth)):
         ntss: List[List[Tuple[int, float]]] = next_token_func(
-            target_img, [x.to_int_tokens(vocab) for x in programs], top_k=branch_factor)
-        next_programs = []
+            target_img, [p.to_int_tokens(vocab) for p in programs], top_k=branch_factor)
 
+        next_programs = []
+        assert len(ntss) == len(programs)
         for nts, program in zip(ntss, programs):
             for j, (nt, nt_prob) in enumerate(nts):
                 nt = ivocab[nt]
                 if j > 0 and nts[j - 1][1] / nt_prob >= 5:
                     # the gap is too huge
+#                     print('>>>', nt, [(ivocab[x], y) for x, y in nts])
                     break
 
                 if nt == "<program>":
@@ -216,12 +220,19 @@ def synthesize(
                 elif nt == "<pad>":
                     continue
 
-                tag, is_opening, classes = HTMLProgram.token2tag(nt)
-                if is_opening:
+                tag, tag_type, classes = HTMLProgram.token2tag(nt)
+                if tag_type == HTMLProgram.OPEN_TAG:
                     next_program = program.add_tag(tag, classes, nt_prob)
-                else:
+                elif tag_type == HTMLProgram.CLOSE_TAG:
                     next_program = program.add_close_tag(tag, nt_prob)
-
+                else:
+                    assert tag_type == HTMLProgram.SPECIAL_TOKEN
+                    next_program = program.add_special_token(tag, nt_prob)
+                
+#                 if next_program is None:
+#                     print("**", program.to_linearized_tag().str_tokens, nt, nt_prob)
+#                     print("     --", nts)
+#                     print("     --", next_token_func(target_img, [program.to_int_tokens(vocab)], top_k=branch_factor))
                 if next_program is None:
                     # invalid program, so we have to ignore this token
                     continue

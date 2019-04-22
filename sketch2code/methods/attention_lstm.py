@@ -11,7 +11,7 @@ class Attention(nn.Module):
 
     def __init__(self, encoder_dim, decoder_dim, attention_dim):
         """
-        :param encoder_dim: feature size of encoded images: N x L x D (D is number of kernels or representation corresponding to part of the image, L is number of pixels, each pixel is a part of an image)
+        :param encoder_dim: feature size of encoded images: N x L x D (D is number of kernels or representation corresponding to parts of the image, L is number of pixels, each pixel is a part of an image)
         :param decoder_dim: size of decoder's RNN
         :param attention_dim: size of the attention network
         """
@@ -41,13 +41,13 @@ class Attention(nn.Module):
 
 class AttentionLSTM(nn.Module):
 
-    def __init__(self, attention_dim, embed_dim, decoder_dim, vocab_size, encoder_dim=2048, dropout=0.5):
+    def __init__(self, encoder_dim, attention_dim, embed_dim, decoder_dim, vocab_size):
         """
+        :param encoder_dim: feature size of encoded images (size of each annotation vector D)
         :param attention_dim: size of attention network
         :param embed_dim: embedding size
         :param decoder_dim: size of decoder's RNN (hidden size)
         :param vocab_size: size of vocabulary
-        :param encoder_dim: feature size of encoded images (size of each annotation vector D)
         :param dropout: dropout
         """
         super(AttentionLSTM, self).__init__()
@@ -57,19 +57,16 @@ class AttentionLSTM(nn.Module):
         self.embed_dim = embed_dim
         self.decoder_dim = decoder_dim
         self.vocab_size = vocab_size
-        self.dropout = dropout
 
         self.attention = Attention(encoder_dim, decoder_dim, attention_dim)  # attention network
 
         self.embedding = nn.Embedding(vocab_size, embed_dim)  # embedding layer
-        self.dropout = nn.Dropout(p=self.dropout)
         self.decode_step = nn.LSTMCell(embed_dim + encoder_dim, decoder_dim, bias=True)  # decoding LSTMCell
         self.init_h = nn.Linear(encoder_dim, decoder_dim)  # linear layer to find initial hidden state of LSTMCell
         self.init_c = nn.Linear(encoder_dim, decoder_dim)  # linear layer to find initial cell state of LSTMCell
         self.f_beta = nn.Linear(decoder_dim, encoder_dim)  # linear layer to create a sigmoid-activated gate
 
         self.sigmoid = nn.Sigmoid()
-        self.fc = nn.Linear(decoder_dim, vocab_size)  # linear layer to find scores over vocabulary
 
     def load_pretrained_embeddings(self, embeddings):
         """
@@ -97,7 +94,7 @@ class AttentionLSTM(nn.Module):
         c = self.init_c(mean_encoder_out)
         return h, c
 
-    def forward(self, bimgs, bx, bxlen, device=None):
+    def forward(self, bimgs, bx, bxlen):
         """
         Forward propagation.
         :param bimgs: encoded images, a tensor of dimension (batch_size, enc_image_size, enc_image_size, encoder_dim)
@@ -105,6 +102,7 @@ class AttentionLSTM(nn.Module):
         :param bxlen: caption lengths, a tensor of dimension (batch_size, 1), is already sorted
         :return: scores for vocabulary, sorted encoded captions, decode lengths, weights, sort indices
         """
+        device = bimgs.device
         batch_size = bimgs.size(0)
         T = bx.shape[-1]  # max length of sentences
 
@@ -118,8 +116,8 @@ class AttentionLSTM(nn.Module):
         # Initialize LSTM state
         h0, c0 = self.init_hidden_state(bimgs)  # (batch_size, decoder_dim)
 
-        # Create tensors to hold word predicion scores and alphas
-        predictions = torch.zeros(batch_size, T, self.vocab_size, device=device)
+        # Create tensors to hold hidden outputs and alphas
+        predictions = torch.zeros(batch_size, T, self.decoder_dim, device=device)
         alphas = torch.zeros(batch_size, T, num_pixels, device=device)
 
         # At each time-step, decode by
@@ -134,8 +132,7 @@ class AttentionLSTM(nn.Module):
             h0, c0 = self.decode_step(
                 torch.cat([embeddings[:batch_size_t, t, :], attention_weighted_encoding], dim=1),
                 (h0[:batch_size_t], c0[:batch_size_t]))  # (batch_size_t, decoder_dim)
-            preds = self.fc(self.dropout(h0))  # (batch_size_t, vocab_size)
-            predictions[:batch_size_t, t, :] = preds
+            predictions[:batch_size_t, t, :] = h0  # (batch_size_t, vocab_size)
             alphas[:batch_size_t, t, :] = alpha
 
-        return predictions, bx, decode_lengths, alphas, sort_ind
+        return predictions, alphas
