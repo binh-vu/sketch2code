@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
+from sketch2code.methods.cnn import conv2d_size_out, pool2d_size_out
 from sketch2code.methods.lstm import LSTMNoEmbedding
 
 
@@ -115,8 +115,6 @@ class DecoderV1(nn.Module):
         x1 = x1.view(batch_size, 1, self.img_repr_size).expand(batch_size, x2.shape[1], x1.shape[1])
         x2 = torch.cat([x1, x2], dim=2)
         x2, (hn, cn) = self.lstm(x2, x2_lens, self.lstm.init_hidden(x2, batch_size))
-        # flatten from N x T x H to N x (T * H)
-        hn = hn.view(batch_size, -1)
         # flatten from N x T x H to (N * T) x H
         x2 = x2.contiguous().view(-1, self.dsl_hidden_dim)
         nts = F.log_softmax(self.lstm2token(x2), dim=1)

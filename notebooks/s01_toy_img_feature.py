@@ -14,7 +14,7 @@ from tqdm.autonotebook import tqdm
 from sketch2code.config import ROOT_DIR
 from sketch2code.data_model import Tag
 from sketch2code.helpers import inc_folder_no
-from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
+from sketch2code.methods.cnn import conv2d_size_out, pool2d_size_out
 from tensorboardX import SummaryWriter
 """
 Helps functions for the jupyter notebook

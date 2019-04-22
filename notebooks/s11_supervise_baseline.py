@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
+from sketch2code.methods.cnn import conv2d_size_out, pool2d_size_out
 from sketch2code.methods.attention_lstm import AttentionLSTM
 from s10_supervise_baseline import BLSuperV1
 
@@ -71,6 +71,7 @@ class AttentionEncoderV1(nn.Module):
         x1 = x1.permute(0, 2, 3, 1)
         return x1
 
+
 class AttentionDecoderV1(nn.Module):
 
     def __init__(self, encoder_dim: int, attention_dim: int, dsl_vocab, dsl_hidden_dim, dsl_embedding_dim, padding_idx: int=0):
@@ -108,7 +109,8 @@ class AttentionDecoderV1(nn.Module):
         nts = nts.view(batch_size, -1, nts.shape[-1])  # N x T x H
         
         return nts, alphas
-    
+
+
 class AttentionBLSuperV1(nn.Module):
     
     def __init__(self, encoder: nn.Module, decoder: nn.Module):

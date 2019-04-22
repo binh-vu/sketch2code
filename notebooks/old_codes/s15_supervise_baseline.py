@@ -17,7 +17,7 @@ from tqdm.autonotebook import tqdm
 from notebooks.s01_toy_img_feature import tag2class
 from sketch2code.helpers import inc_folder_no
 from sketch2code.config import ROOT_DIR
-from sketch2code.methods.dqn import conv2d_size_out, pool2d_size_out
+from sketch2code.methods.cnn import conv2d_size_out, pool2d_size_out
 from sketch2code.methods.lstm import prepare_batch_sent_lbls, prepare_batch_sents, padded_aware_nllloss, LSTMNoEmbedding
 from tensorboardX import SummaryWriter
 from s05_supervise_baseline import make_toy_vocab, Example, drop_examples, make_dataset, iter_batch
