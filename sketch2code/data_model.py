@@ -128,7 +128,14 @@ class LinearizedTag:
 
     def clone(self):
         return LinearizedTag(self.str_tokens, self.tokens, copy.copy(self.opening_tags))
-
+    
+    def pop(self):
+        if len(self.opening_tags) > 0 and self.opening_tags[-1] == len(self.tokens) - 1:
+            self.opening_tags.pop()
+        
+        self.str_tokens = self.str_tokens.delete(len(self.str_tokens) - 1)
+        self.tokens = self.tokens.delete(len(self.tokens) - 1)
+        
     def add_open_tag(self, tag_name: str):
         self.opening_tags.append(len(self.tokens))
         token = f"<{tag_name}>"

@@ -94,7 +94,7 @@ class AttentionLSTM(nn.Module):
         c = self.init_c(mean_encoder_out)
         return h, c
 
-    def forward(self, bimgs, bx, bxlen):
+    def forward(self, bimgs, bx, bxlen, init_state=None):
         """
         Forward propagation.
         :param bimgs: encoded images, a tensor of dimension (batch_size, enc_image_size, enc_image_size, encoder_dim)
@@ -114,7 +114,10 @@ class AttentionLSTM(nn.Module):
         embeddings = self.embedding(bx)  # (batch_size, max_caption_length, embed_dim)
 
         # Initialize LSTM state
-        h0, c0 = self.init_hidden_state(bimgs)  # (batch_size, decoder_dim)
+        if init_state is None:
+            h0, c0 = self.init_hidden_state(bimgs)  # (batch_size, decoder_dim)
+        else:
+            h0, c0 = init_state
 
         # Create tensors to hold hidden outputs and alphas
         predictions = torch.zeros(batch_size, T, self.decoder_dim, device=device)

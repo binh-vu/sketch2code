@@ -270,7 +270,7 @@ def train(model: nn.Module,
                     valid_res = evaluate(
                         model, loss_func, images, valid_examples, device, batch_size=eval_batch_size)
                     for k, v in valid_res.items():
-                        writer.add_scalar(f'valid/{k}', v.avg, global_step)
+                        writer.add_scalar(f'valid/{k}', v.avg, i)
 
                     if valid_res['top_1_acc'].avg > best_performance:
                         best_performance = valid_res['top_1_acc'].avg
@@ -284,7 +284,7 @@ def train(model: nn.Module,
                     test_res = evaluate(
                         model, loss_func, images, test_examples, device, batch_size=eval_batch_size)
                     for k, v in test_res.items():
-                        writer.add_scalar(f'test/{k}', v.avg, global_step)
+                        writer.add_scalar(f'test/{k}', v.avg, i)
 
                 epoches.set_postfix(
                     b_l=f'{batch_loss.avg:.5f}',
@@ -305,7 +305,8 @@ def train(model: nn.Module,
         
 class BasicDeveloper:
     
-    def __init__(self, batch_size, tag, oimage):
+    def __init__(self, model, batch_size, tag, oimage):
+        self.model = model
         self.batch_size = batch_size
         self.tag = tag
         self.oimage = oimage
@@ -317,9 +318,9 @@ class BasicDeveloper:
         for i in range(0, len(programs), self.batch_size):
             # prepare data
             bx = programs[i:i+self.batch_size]
-            bx, bxlen, sorted_idx = prepare_batch_sentences(bx, device=device)
+            bx, bxlen, sorted_idx = prepare_batch_sentences(bx, device=img.device)
             bimgs = img.view(1, *img.shape).expand(bx.shape[0], *img.shape)
-            bnx_pred = model(bimgs, bx, bxlen)
+            bnx_pred = self.model(bimgs, bx, bxlen)
             
             # do thing because the order was changed
             bresults = []

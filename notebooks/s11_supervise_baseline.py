@@ -100,7 +100,6 @@ class AttentionDecoderV1(nn.Module):
         :return:
         """
         batch_size = x2.shape[0]
-        
         x2, alphas = self.attention_lstm(x1, x2, x2_lens)
         
         # flatten from N x T x H to (N * T) x H
